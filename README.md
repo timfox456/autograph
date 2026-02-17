@@ -21,6 +21,90 @@ Instead of binary signatures (which can be stripped or faked), Autograph uses "L
 ### Immutable Ledger (Planned)
 The results of attestations and the hashes of verified artifacts are stored on a tamper-proof ledger to provide a permanent, auditable history of provenance.
 
+## Getting Started
+
+### Installation with uv (recommended)
+
+```bash
+# Install uv if you haven't already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone the repository
+git clone https://github.com/yourusername/autograph.git
+cd autograph
+
+# Set up the data science component
+cd autograph-ds
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv pip install -r requirements.txt
+
+# Run the demo
+python demo_attestation.py
+```
+
+### Quick Example
+
+```python
+from autograph_ds.src.engine import AttestationEngine
+
+# Load pre-trained models
+engine = AttestationEngine(
+    matcher_path="autograph-ds/research/models/matcher.joblib",
+    consistency_dir="autograph-ds/research/models"
+)
+
+# Verify a code sample
+code = """
+def greet(name):
+    return f"Hello, {name}!"
+"""
+
+result = engine.attest(code, claimed_identity="gpt4o")
+print(f"Verdict: {result['verdict']}")
+print(f"Confidence: {result['confidence']:.2%}")
+```
+
 ## Docs
 
 *   [Abstract](docs/abstract.md): The foundational philosophy and technical theory behind Autograph.
+*   [Logical DNA Specification](autograph-ds/docs/logical_dna.md): Feature extraction methodology
+*   [Models & Architecture](autograph-ds/docs/models.md): How the attestation engine works
+
+## Development
+
+This project uses [uv](https://github.com/astral-sh/uv) for fast, reliable Python package management.
+
+```bash
+# Install development dependencies
+uv pip install -r autograph-ds/requirements-dev.txt
+
+# Run tests
+cd autograph-ds
+pytest test_basic.py -v
+
+# Format code
+black src/
+ruff check src/
+```
+
+## Project Status
+
+**This is a proof-of-concept.** The current implementation demonstrates the theoretical approach with a small dataset (17 samples). A production system would require:
+
+- Thousands of samples per identity
+- Multi-language support (currently Python only)
+- Distributed ledger integration
+- LSP (Language Server Protocol) integration for IDE support
+- Continuous model updates as coding styles evolve
+
+## License
+
+GPLv3
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues or pull requests.
+
+## Copyright (c) 2026  by Timothy M Fox
+. All Rights Reserved.

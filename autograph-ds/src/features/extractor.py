@@ -13,12 +13,28 @@ class LogicalDNAExtractor:
     def extract(self, code: str, enabled_buckets: List[str] = None) -> Dict[str, Any]:
         """
         Extracts features from Python code based on opted-in buckets.
+
+        Args:
+            code: Python source code to analyze
+            enabled_buckets: List of feature buckets to extract (default: all)
+
+        Returns:
+            Dictionary of extracted features
+
+        Raises:
+            ValueError: If code is empty or parsing fails
         """
+        if not code or not code.strip():
+            raise ValueError("Code cannot be empty")
+
         if enabled_buckets is None:
             enabled_buckets = ["structural_topology", "micro_stylistics", "logical_idioms"]
 
-        tree = self.parser.parse(bytes(code, "utf8"))
-        root_node = tree.root_node
+        try:
+            tree = self.parser.parse(bytes(code, "utf8"))
+            root_node = tree.root_node
+        except Exception as e:
+            raise ValueError(f"Failed to parse code: {e}")
         
         dna = {}
         

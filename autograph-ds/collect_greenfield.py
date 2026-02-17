@@ -1,3 +1,20 @@
+"""
+Greenfield Code Collection Script
+
+This script collects "greenfield" code samples (newly added code) from GitHub repositories
+using the GitHub CLI (gh). It extracts code from commits by specific authors to build
+a training dataset of human-authored code with known provenance.
+
+Requirements:
+    - GitHub CLI (gh) must be installed and authenticated
+    - Run: gh auth login
+
+Usage:
+    python collect_greenfield.py
+
+The script will download code samples from configured repositories and save them
+to autograph-ds/research/data/raw/
+"""
 import subprocess
 import json
 import os
@@ -5,6 +22,14 @@ import os
 def get_greenfield_fragments(repo, author, limit=5):
     """
     Uses gh to find commits by an author and extract newly added code blocks.
+
+    Args:
+        repo: GitHub repository in format "owner/repo" (e.g., "django/django")
+        author: GitHub username of the author
+        limit: Maximum number of commits to fetch (default: 5)
+
+    Returns:
+        List of code fragment strings
     """
     print(f"Searching for greenfield commits by {author} in {repo}...")
     

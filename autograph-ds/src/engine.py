@@ -2,23 +2,67 @@ from src.features.extractor import LogicalDNAExtractor
 from src.models.supervised import IdentityMatcher
 from src.models.anomaly import ConsistencyChecker
 from src.models.heuristics import HeuristicDetector
+from src.utils import flatten_dna
 import numpy as np
+import os
 
 class AttestationEngine:
     def __init__(self, matcher_path, consistency_dir):
+        """
+        Initialize the AttestationEngine with pre-trained models.
+
+        Args:
+            matcher_path: Path to the supervised matcher model file
+            consistency_dir: Directory containing consistency checker models
+
+        Raises:
+            FileNotFoundError: If model files are not found
+            Exception: If models fail to load
+        """
+        if not os.path.exists(matcher_path):
+            raise FileNotFoundError(f"Matcher model not found at: {matcher_path}")
+        if not os.path.exists(consistency_dir):
+            raise FileNotFoundError(f"Consistency models directory not found at: {consistency_dir}")
+
         self.extractor = LogicalDNAExtractor()
         self.matcher = IdentityMatcher()
-        self.matcher.load(matcher_path)
+
+        try:
+            self.matcher.load(matcher_path)
+        except Exception as e:
+            raise Exception(f"Failed to load matcher model: {e}")
+
         self.consistency = ConsistencyChecker()
-        self.consistency.load(consistency_dir)
+        try:
+            self.consistency.load(consistency_dir)
+        except Exception as e:
+            raise Exception(f"Failed to load consistency models: {e}")
+
         self.heuristics = HeuristicDetector()
 
     def attest(self, code, claimed_identity, enabled_buckets=None):
         """
         Performs a full attestation of the code against a claimed identity.
+
+        Args:
+            code: Source code string to analyze
+            claimed_identity: The identity claiming authorship
+            enabled_buckets: List of feature buckets to use (default: all)
+
+        Returns:
+            Dictionary with attestation results and verdict
+
+        Raises:
+            ValueError: If code is empty or invalid
         """
+        if not code or not code.strip():
+            raise ValueError("Code cannot be empty")
+
         # 1. Extract DNA
-        dna = self.extractor.extract(code, enabled_buckets)
+        try:
+            dna = self.extractor.extract(code, enabled_buckets)
+        except Exception as e:
+            raise Exception(f"Failed to extract DNA features: {e}")
         
         # Flatten for models (simplified flattening for the engine)
         # In a real system, we'd use the same process_dataset logic
@@ -73,7 +117,8 @@ class AttestationEngine:
         return "MISMATCH"
 
     def _flatten_for_engine(self, dna):
-        # This should match the logic in process_dataset.py
-        # For the pilot, let's keep it simple or import the function
-        from process_dataset import flatten_dna
+        """
+        Flatten DNA dictionary for model consumption.
+        Uses shared utility function to ensure consistency with training.
+        """
         return flatten_dna(dna)

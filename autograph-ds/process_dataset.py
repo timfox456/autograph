@@ -2,25 +2,7 @@ import os
 import pandas as pd
 import json
 from src.features.extractor import LogicalDNAExtractor
-
-def flatten_dna(dna, prefix=''):
-    items = {}
-    for k, v in dna.items():
-        if isinstance(v, dict):
-            # Special handling for node_type_counts which is a dictionary of type distribution
-            if k == 'node_type_counts':
-                for type_name, count in v.items():
-                    items[f"node_{type_name}"] = count
-            elif k == 'quote_preference':
-                for quote_type, count in v.items():
-                    # Sanitize quote type for column name
-                    safe_name = quote_type.replace('"', 'triple').replace("'", 'single')
-                    items[f"quote_{safe_name}"] = count
-            else:
-                items.update(flatten_dna(v, prefix=f"{k}_"))
-        else:
-            items[k] = v
-    return items
+from src.utils import flatten_dna
 
 def main():
     extractor = LogicalDNAExtractor()
