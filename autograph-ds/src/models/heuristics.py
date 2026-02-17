@@ -14,7 +14,7 @@ class HeuristicDetector:
                 r"def solve\("
             ],
             "deepseek": [
-                r"# -*- coding: utf-8 -*-", # Often includes encoding header
+                r"# -\*- coding: utf-8 -\*-", # Often includes encoding header
             ]
         }
 

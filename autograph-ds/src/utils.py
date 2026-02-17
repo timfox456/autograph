@@ -26,7 +26,7 @@ def flatten_dna(dna, prefix=''):
                     safe_name = quote_type.replace('"', 'double').replace("'", 'single')
                     items[f"quote_{safe_name}"] = count
             else:
-                items.update(flatten_dna(v, prefix=f"{k}_"))
+                items.update(flatten_dna(v, prefix=f"{prefix}{k}_"))
         else:
-            items[k] = v
+            items[f"{prefix}{k}"] = v
     return items
