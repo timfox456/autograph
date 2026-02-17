@@ -6,6 +6,11 @@ Autograph is a zero-trust provenance framework designed to establish trust in di
 
 In an era of generative AI, knowing the origin and authenticity of code and content is critical. Autograph provides a decentralized way to verify "who" created "what" without necessarily compromising the privacy of the creator.
 
+
+## Manifesto
+
+* [Manifesto](./docs/MANIFESTO.md)  : this document explains the big picture vision of what autograph is about.
+
 ## Project Structure
 
 *   **[autograph-ds](./autograph-ds)**: The Data Science component. Implements the Logical DNA extraction and the Probabilistic Attestation engine. This project demonstrates how we can identify authors or AI models based on their coding patterns.
