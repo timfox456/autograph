@@ -38,14 +38,18 @@ class ConsistencyChecker:
         """
         if identity not in self.models:
             return None, None
-            
+
         model = self.models[identity]
-        
+
         # Prepare data
         X_test = pd.DataFrame([feature_dict])
-        for col in self.features:
-            if col not in X_test.columns:
-                X_test[col] = 0
+
+        # Identify missing columns and add them all at once to prevent DataFrame fragmentation
+        missing_cols = [col for col in self.features if col not in X_test.columns]
+        if missing_cols:
+            missing_data = pd.DataFrame([[0] * len(missing_cols)], columns=missing_cols)
+            X_test = pd.concat([X_test, missing_data], axis=1)
+
         X_test = X_test[self.features]
         
         prediction = model.predict(X_test)[0]

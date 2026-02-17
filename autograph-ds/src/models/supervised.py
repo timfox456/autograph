@@ -35,12 +35,13 @@ class IdentityMatcher:
         """
         # Create a single row DataFrame with same columns as training
         X_test = pd.DataFrame([feature_dict])
-        
-        # Ensure all columns exist, fill missing with 0
-        for col in self.features:
-            if col not in X_test.columns:
-                X_test[col] = 0
-        
+
+        # Identify missing columns and add them all at once to prevent DataFrame fragmentation
+        missing_cols = [col for col in self.features if col not in X_test.columns]
+        if missing_cols:
+            missing_data = pd.DataFrame([[0] * len(missing_cols)], columns=missing_cols)
+            X_test = pd.concat([X_test, missing_data], axis=1)
+
         # Reorder columns to match training
         X_test = X_test[self.features]
         
