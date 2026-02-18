@@ -97,30 +97,28 @@ python train_models.py
 
 ### Running Tests
 
-```bash
-# Run basic tests
-pytest test_basic.py -v
+We separate unit tests (logic/bugs) from model benchmarks (accuracy/metrics).
 
-# Run with coverage
-pytest test_basic.py --cov=src --cov-report=html
+```bash
+# Run unit tests
+export PYTHONPATH=$PYTHONPATH:$(pwd)
+pytest tests/unit -v
+
+# Run model performance benchmarks
+pytest tests/benchmarks -v -s
 ```
 
-## Development Workflow
+### Model Performance Metrics
 
-1. **Collect training data**: Use `download_samples.py` or `collect_greenfield.py`
-2. **Process dataset**: Run `process_dataset.py` to extract features
-3. **Train models**: Run `train_models.py` to build the ML models
-4. **Test attestation**: Use `demo_attestation.py` or the quick start example above
+To get a detailed report of the current model's accuracy on the processed dataset:
 
-## Dataset Limitations
+```bash
+python report_metrics.py
+```
 
-The current dataset consists of:
-- **4 AI models**: GPT-4o, Claude 3.5, DeepSeek V3, Llama 3
-- **5 human authors**: mariusz, kenneth, django, requests, fastapi
-- **Total: 17 samples**
+## Dataset Details
 
-This is sufficient for demonstrating the concept but far too small for production use. A robust system would need:
-- 100+ samples per identity
-- More diverse code types (not just Python)
-- Temporal validation (code from different time periods)
-- Cross-validation to prevent overfitting
+The dataset currently contains ~490 samples across 7 distinct identities (AIs and Humans).
+
+- **AI models**: GPT-4o, Claude 3.5, DeepSeek V3, Llama 3, Gemini
+- **Human authors**: mariusz, kenneth (and others from greenfield collection)

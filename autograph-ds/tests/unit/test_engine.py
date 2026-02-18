@@ -52,10 +52,15 @@ def test_engine_missing_matcher_model(temp_dir):
     with pytest.raises(FileNotFoundError, match="Matcher model not found"):
         AttestationEngine(nonexistent_path, CONSISTENCY_DIR)
 
-def test_engine_missing_consistency_dir():
+def test_engine_missing_consistency_dir(temp_dir):
     """Test that FileNotFoundError is raised when consistency directory doesn't exist."""
+    # Create a dummy matcher model so it passes the first check
+    matcher_path = os.path.join(temp_dir, "matcher.joblib")
+    with open(matcher_path, 'wb') as f:
+        joblib.dump({'model': None, 'label_encoder': None, 'features': []}, f)
+        
     with pytest.raises(FileNotFoundError, match="Consistency models directory not found"):
-        AttestationEngine(MATCHER_PATH, "/nonexistent/directory/path")
+        AttestationEngine(matcher_path, "/nonexistent/directory/path")
 
 def test_engine_matcher_load_failure(temp_dir):
     """Test that Exception is raised when matcher model fails to load."""
@@ -64,8 +69,12 @@ def test_engine_matcher_load_failure(temp_dir):
     with open(bad_model_path, 'w') as f:
         f.write("not a valid joblib file")
 
+    # Ensure consistency dir exists so it doesn't fail there first
+    models_dir = os.path.join(temp_dir, "models")
+    os.makedirs(models_dir, exist_ok=True)
+
     with pytest.raises(Exception, match="Failed to load matcher model"):
-        AttestationEngine(bad_model_path, CONSISTENCY_DIR)
+        AttestationEngine(bad_model_path, models_dir)
 
 def test_engine_consistency_load_failure(temp_dir):
     """Test that Exception is raised when consistency models fail to load."""

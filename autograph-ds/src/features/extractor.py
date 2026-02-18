@@ -102,6 +102,13 @@ class LogicalDNAExtractor:
         # Quote preference
         quotes = re.findall(r"(['\"]{1,3})", code)
         quote_counts = Counter(quotes)
+        # Ensure ' and " are always present to avoid KeyErrors in tests/models
+        quote_prefs = {
+            "'": quote_counts.get("'", 0),
+            '"': quote_counts.get('"', 0),
+            "'''": quote_counts.get("'''", 0),
+            '"""': quote_counts.get('"""', 0)
+        }
         
         # Trailing commas in lists/dicts (simplified)
         trailing_commas = len(re.findall(r",\s*[\]\}]", code))
@@ -109,7 +116,7 @@ class LogicalDNAExtractor:
         return {
             "indent_type": np.mean(indent_types) if indent_types else 0.5, # ratio of tabs
             "indent_width": np.median(indent_widths) if indent_widths else 4,
-            "quote_preference": dict(quote_counts),
+            "quote_preference": quote_prefs,
             "trailing_commas_count": trailing_commas
         }
 
@@ -126,9 +133,15 @@ class LogicalDNAExtractor:
         # Comprehensions
         list_comps = len(re.findall(r"\[.*for.*in.*\]", code))
         
+        # More structural features for idiomatic bucket
+        try_excepts = len(re.findall(r"\btry\b", code))
+        classes = len(re.findall(r"\bclass\b", code))
+        
         return {
             "snake_case_ratio": len(snake_case) / len(identifiers) if identifiers else 0,
             "camel_case_ratio": len(camel_case) / len(identifiers) if identifiers else 0,
             "f_string_ratio": f_strings / (f_strings + format_calls) if (f_strings + format_calls) > 0 else 0.5,
-            "list_comprehension_count": list_comps
+            "list_comprehension_count": list_comps,
+            "try_except_count": try_excepts,
+            "class_definition_count": classes
         }
