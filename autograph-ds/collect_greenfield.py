@@ -70,14 +70,16 @@ def main():
     # Example: Mariusz Felisiak (Django) and Kenneth Reitz (Requests - legacy)
     targets = [
         {"repo": "django/django", "author": "felixxm", "name": "mariusz"},
-        {"repo": "psf/requests", "author": "kennethreitz", "name": "kenneth"}
+        {"repo": "psf/requests", "author": "kennethreitz", "name": "kenneth"},
+        {"repo": "pallets/flask", "author": "davidism", "name": "david"},
+        {"repo": "tiangolo/fastapi", "author": "tiangolo", "name": "sebastian"}
     ]
     
     output_dir = "autograph-ds/research/data/raw"
     os.makedirs(output_dir, exist_ok=True)
     
     for target in targets:
-        code_blocks = get_greenfield_fragments(target["repo"], target["author"])
+        code_blocks = get_greenfield_fragments(target["repo"], target["author"], limit=100)
         for i, block in enumerate(code_blocks):
             filename = f"human_{target['name']}_{i}.py"
             with open(os.path.join(output_dir, filename), "w") as f:

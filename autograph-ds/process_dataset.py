@@ -33,7 +33,12 @@ def main():
                 flat_dna["identity"] = filename.replace("human_", "").replace(".py", "")
         else:
             flat_dna["label"] = "ai"
-            flat_dna["identity"] = filename.replace("ai_", "").replace(".py", "")
+            # Group by model name: ai_llama3_0.py -> llama3
+            parts = filename.split("_")
+            if len(parts) >= 2:
+                flat_dna["identity"] = parts[1]
+            else:
+                flat_dna["identity"] = filename.replace("ai_", "").replace(".py", "")
         
         # Final cleanup for identity names
         flat_dna["identity"] = flat_dna["identity"].replace(".py", "").replace("human_", "")
