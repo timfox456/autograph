@@ -13,8 +13,10 @@ STRUCTURAL_BUCKET = FeatureBucket(
     name="structural_topology",
     description="AST node distribution and control flow shape.",
     features=[
-        "node_type_counts", "max_nesting_depth", 
-        "avg_branching_factor", "cyclomatic_complexity"
+        "node_type_counts",
+        "max_nesting_depth",
+        "avg_branching_factor",
+        "total_nodes",
     ],
     privacy_level="High"
 )
@@ -24,8 +26,10 @@ STYLISTIC_BUCKET = FeatureBucket(
     name="micro_stylistics",
     description="Indentation, quoting, and whitespace patterns.",
     features=[
-        "indent_type", "indent_width", 
-        "quote_preference", "trailing_commas"
+        "indent_type",
+        "indent_width",
+        "quote_preference",
+        "trailing_commas_count",
     ],
     privacy_level="Medium"
 )
@@ -35,8 +39,12 @@ IDIOMATIC_BUCKET = FeatureBucket(
     name="logical_idioms",
     description="Naming conventions and preferred language constructs.",
     features=[
-        "naming_convention", "f_string_ratio", 
-        "comprehension_vs_loop", "docstring_style"
+        "snake_case_ratio",
+        "camel_case_ratio",
+        "f_string_ratio",
+        "list_comprehension_count",
+        "try_except_count",
+        "class_definition_count",
     ],
     privacy_level="Low"
 )

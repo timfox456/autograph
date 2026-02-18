@@ -8,10 +8,11 @@ coding styles from different authors and projects.
 Usage:
     python download_samples.py
 
-The script will download sample files to autograph-ds/research/data/raw/
+The script will download sample files to research/data/raw/ (relative to this script).
 """
 import urllib.request
 import os
+from pathlib import Path
 
 def download_sample(url, filename):
     """
@@ -34,7 +35,9 @@ samples = {
     "human_fastapi.py": "https://raw.githubusercontent.com/tiangolo/fastapi/master/fastapi/applications.py"
 }
 
-os.makedirs("autograph-ds/research/data/raw", exist_ok=True)
+base = Path(__file__).parent
+raw_dir = base / "research/data/raw"
+raw_dir.mkdir(parents=True, exist_ok=True)
 
 for filename, url in samples.items():
-    download_sample(url, f"autograph-ds/research/data/raw/{filename}")
+    download_sample(url, str(raw_dir / filename))

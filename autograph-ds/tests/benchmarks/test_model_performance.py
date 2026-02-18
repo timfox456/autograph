@@ -1,5 +1,6 @@
 import pytest
 import os
+from pathlib import Path
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -7,11 +8,12 @@ from src.models.supervised import IdentityMatcher
 from src.models.anomaly import ConsistencyChecker
 from sklearn.metrics import accuracy_score, classification_report
 
-DATASET_PATH = "autograph-ds/research/data/processed/dataset.csv"
+# Resolve dataset relative to this test file
+DATASET_PATH = Path(__file__).parents[2] / "research/data/processed/dataset.csv"
 
 @pytest.fixture
 def dataset() -> pd.DataFrame:
-    if not os.path.exists(DATASET_PATH):
+    if not DATASET_PATH.exists():
         pytest.skip("Processed dataset not found. Run process_dataset.py first.")
     df = pd.read_csv(DATASET_PATH)
     # Filter out identities with only 1 sample as they can't be split for stratification

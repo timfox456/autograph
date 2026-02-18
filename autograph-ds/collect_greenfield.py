@@ -13,11 +13,12 @@ Usage:
     python collect_greenfield.py
 
 The script will download code samples from configured repositories and save them
-to autograph-ds/research/data/raw/
+to research/data/raw/ (relative to this script).
 """
 import subprocess
 import json
 import os
+from pathlib import Path
 
 def get_greenfield_fragments(repo, author, limit=5):
     """
@@ -75,14 +76,15 @@ def main():
         {"repo": "tiangolo/fastapi", "author": "tiangolo", "name": "sebastian"}
     ]
     
-    output_dir = "autograph-ds/research/data/raw"
-    os.makedirs(output_dir, exist_ok=True)
+    base = Path(__file__).parent
+    output_dir = base / "research/data/raw"
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     for target in targets:
         code_blocks = get_greenfield_fragments(target["repo"], target["author"], limit=100)
         for i, block in enumerate(code_blocks):
             filename = f"human_{target['name']}_{i}.py"
-            with open(os.path.join(output_dir, filename), "w") as f:
+            with open(output_dir / filename, "w") as f:
                 f.write(block)
             print(f"Saved greenfield fragment: {filename}")
 

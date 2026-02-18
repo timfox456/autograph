@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import random
 import time
 from dotenv import load_dotenv
@@ -133,8 +134,9 @@ def fetch_real_samples(model_type, api_key):
 # --- Main Execution ---
 
 def main():
-    output_dir = "autograph-ds/research/data/raw"
-    os.makedirs(output_dir, exist_ok=True)
+    base = Path(__file__).parent
+    output_dir = base / "research/data/raw"
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # Configuration: (name, generator, api_key_env)
     configs = [
@@ -159,14 +161,14 @@ def main():
         # Save real samples
         for i, code in enumerate(real_samples):
             filename = f"ai_{model_name}_{i}.py"
-            with open(os.path.join(output_dir, filename), "w") as f:
+            with open(output_dir / filename, "w") as f:
                 f.write(code)
         
         # Fill the rest with synthetic
         for i in range(real_count, TOTAL_TARGET):
             filename = f"ai_{model_name}_{i}.py"
             content = generator(i)
-            with open(os.path.join(output_dir, filename), "w") as f:
+            with open(output_dir / filename, "w") as f:
                 f.write(content)
         
         print(f"Generated {TOTAL_TARGET} samples for {model_name} ({real_count} real, {TOTAL_TARGET - real_count} synthetic)")

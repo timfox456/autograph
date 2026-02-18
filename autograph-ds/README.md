@@ -80,7 +80,7 @@ print(f"Detected Identity: {result['detected_identity']}")
 The demo showcases various scenarios, including verified matches, mismatches, spoofing detection, and privacy-preserving attestation.
 
 ```bash
-python autograph-ds/demo_attestation.py
+python demo_attestation.py
 ```
 
 ### Training the Models
@@ -122,3 +122,7 @@ The dataset currently contains ~490 samples across 7 distinct identities (AIs an
 
 - **AI models**: GPT-4o, Claude 3.5, DeepSeek V3, Llama 3, Gemini
 - **Human authors**: mariusz, kenneth (and others from greenfield collection)
+
+## License
+
+AGPL-3.0-or-later. This subproject is part of the core-adjacent exploratory work and follows the AGPL licensing model. Future SDKs/client libraries and IDE integrations are intended to be Apache-2.0.

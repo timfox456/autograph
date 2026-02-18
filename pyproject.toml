@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Zero-trust provenance framework for digital artifacts"
 readme = "README.md"
 requires-python = ">=3.12"
-license = {text = "MIT"}
+license = {text = "AGPL-3.0-or-later"}
 authors = [
     {name = "Autograph Contributors"}
 ]
@@ -12,6 +12,7 @@ keywords = ["provenance", "attribution", "code-analysis", "ml", "security"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Topic :: Security",
     "Topic :: Software Development :: Quality Assurance",
     "Programming Language :: Python :: 3",
@@ -29,10 +30,10 @@ dependencies = [
     "scipy>=1.12.0",
 ]
 
-[project.urls]
-Homepage = "https://github.com/yourusername/autograph"
-Repository = "https://github.com/yourusername/autograph"
-Documentation = "https://github.com/yourusername/autograph/blob/main/README.md"
+#[project.urls]
+#Homepage = "TBD"
+#Repository = "TBD"
+#Documentation = "TBD"
 
 [tool.uv]
 dev-dependencies = [

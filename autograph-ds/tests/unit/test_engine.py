@@ -1,21 +1,23 @@
 import pytest
 import os
+from pathlib import Path
 import tempfile
 import shutil
 import joblib
 from unittest.mock import patch, MagicMock
 from src.engine import AttestationEngine
 
-# Use real models for integration testing if they exist
-MATCHER_PATH = "research/models/matcher.joblib"
-CONSISTENCY_DIR = "research/models"
+# Use real models for integration testing if they exist (relative to autograph-ds/)
+BASE = Path(__file__).parents[2]
+MATCHER_PATH = BASE / "research/models/matcher.joblib"
+CONSISTENCY_DIR = BASE / "research/models"
 
 @pytest.fixture
 def engine():
     # Only run if models are present
-    if not os.path.exists(MATCHER_PATH):
+    if not MATCHER_PATH.exists():
         pytest.skip("Models not found for integration test")
-    return AttestationEngine(MATCHER_PATH, CONSISTENCY_DIR)
+    return AttestationEngine(str(MATCHER_PATH), str(CONSISTENCY_DIR))
 
 @pytest.fixture
 def temp_dir():
@@ -50,7 +52,7 @@ def test_engine_missing_matcher_model(temp_dir):
     """Test that FileNotFoundError is raised when matcher model doesn't exist."""
     nonexistent_path = os.path.join(temp_dir, "nonexistent.joblib")
     with pytest.raises(FileNotFoundError, match="Matcher model not found"):
-        AttestationEngine(nonexistent_path, CONSISTENCY_DIR)
+        AttestationEngine(nonexistent_path, str(CONSISTENCY_DIR))
 
 def test_engine_missing_consistency_dir(temp_dir):
     """Test that FileNotFoundError is raised when consistency directory doesn't exist."""
@@ -78,7 +80,7 @@ def test_engine_matcher_load_failure(temp_dir):
 
 def test_engine_consistency_load_failure(temp_dir):
     """Test that Exception is raised when consistency models fail to load."""
-    if not os.path.exists(MATCHER_PATH):
+    if not MATCHER_PATH.exists():
         pytest.skip("Models not found for integration test")
 
     # Create empty directory (no consistency models inside)
@@ -90,7 +92,7 @@ def test_engine_dna_extraction_failure():
     if not os.path.exists(MATCHER_PATH):
         pytest.skip("Models not found for integration test")
 
-    engine = AttestationEngine(MATCHER_PATH, CONSISTENCY_DIR)
+    engine = AttestationEngine(str(MATCHER_PATH), str(CONSISTENCY_DIR))
 
     # Mock the extractor to raise an exception
     with patch.object(engine.extractor, 'extract', side_effect=Exception("Parse error")):

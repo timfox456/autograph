@@ -63,15 +63,14 @@ python demo_attestation.py
 ### Quick Example
 
 ```python
-from autograph_ds.src.engine import AttestationEngine
+# Run from within the `autograph-ds` directory
+from src.engine import AttestationEngine
 
-# Load pre-trained models
 engine = AttestationEngine(
-    matcher_path="autograph-ds/research/models/matcher.joblib",
-    consistency_dir="autograph-ds/research/models"
+    matcher_path="research/models/matcher.joblib",
+    consistency_dir="research/models",
 )
 
-# Verify a code sample
 code = """
 def greet(name):
     return f"Hello, {name}!"
@@ -92,7 +91,7 @@ uv pip install -r autograph-ds/requirements-dev.txt
 
 # Run tests
 cd autograph-ds
-pytest test_basic.py -v
+pytest tests/unit -v
 
 # Format code
 black src/
@@ -111,11 +110,8 @@ ruff check src/
 
 ## License
 
-GPLv3
+AGPL-3.0-or-later. The current codebase (core-adjacent EDA and prototypes) is licensed under the GNU Affero General Public License to align with the future AGPL-licensed core. Future SDKs, client libraries, and LSP integrations are intended to be Apache-2.0.
 
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues or pull requests.
-
-## Copyright (c) 2026  by Timothy M Fox
-. All Rights Reserved.

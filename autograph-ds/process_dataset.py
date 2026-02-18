@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import pandas as pd
 import json
 from src.features.extractor import LogicalDNAExtractor
@@ -6,16 +7,17 @@ from src.utils import flatten_dna
 
 def main():
     extractor = LogicalDNAExtractor()
-    raw_dir = "autograph-ds/research/data/raw"
-    processed_dir = "autograph-ds/research/data/processed"
-    os.makedirs(processed_dir, exist_ok=True)
+    base = Path(__file__).parent
+    raw_dir = base / "research/data/raw"
+    processed_dir = base / "research/data/processed"
+    processed_dir.mkdir(parents=True, exist_ok=True)
     
     rows = []
     for filename in os.listdir(raw_dir):
         if not filename.endswith(".py"):
             continue
             
-        file_path = os.path.join(raw_dir, filename)
+        file_path = raw_dir / filename
         with open(file_path, 'r') as f:
             code = f.read()
             
@@ -50,7 +52,7 @@ def main():
     # Fill NaNs with 0 for counts/distributions
     df = df.fillna(0)
     
-    output_path = os.path.join(processed_dir, "dataset.csv")
+    output_path = processed_dir / "dataset.csv"
     df.to_csv(output_path, index=False)
     print(f"Processed {len(rows)} files into {output_path}")
 
