@@ -81,14 +81,15 @@ def test_consistency_checker_performance(dataset, tmp_path):
             
     # 2. Test "Cross Identity" (should be mostly anomalies)
     # Pick a few samples and test against WRONG identities
+    rng = np.random.default_rng(42)
     identities = dataset['identity'].unique()
-    for _, row in test_df.sample(n=min(20, len(test_df))).iterrows():
+    for _, row in test_df.sample(n=min(20, len(test_df)), random_state=42).iterrows():
         true_id = row['identity']
         other_ids = [i for i in identities if i != true_id]
         if not other_ids:
             continue
-            
-        wrong_id = np.random.choice(other_ids)
+
+        wrong_id = rng.choice(other_ids)
         features = row.drop(['label', 'identity', 'filename']).to_dict()
         
         pred, score = consistency.check_consistency(wrong_id, features)

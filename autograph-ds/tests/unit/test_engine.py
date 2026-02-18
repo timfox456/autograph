@@ -113,14 +113,14 @@ def test_engine_consistency_penalty(engine):
 
 def test_engine_heuristic_penalty(engine):
     """Test that confidence is heavily penalized when heuristic flags are present."""
-    code = "# -*- coding: utf-8 -*-\ndef test(): return True"
+    code = "def test(): return True"
 
-    # This code should trigger DeepSeek marker detection
-    result = engine.attest(code, "gpt4o")  # Claiming wrong identity
+    with patch.object(engine.heuristics, 'verify_metadata', return_value=["MODEL_SPOOFING_SUSPECTED"]), \
+         patch.object(engine.heuristics, 'detect_markers', return_value=["DEEPSEEK_MARKER"]):
+        result = engine.attest(code, "gpt4o")
 
-    # Confidence should be heavily reduced (0.2x) due to model spoofing
-    if result["flags"]:  # If flags were detected
-        assert result["confidence"] < 0.3  # Should be very low
+    assert len(result["flags"]) > 0
+    assert result["confidence"] < 0.3
 
 # Verdict Edge Cases
 
