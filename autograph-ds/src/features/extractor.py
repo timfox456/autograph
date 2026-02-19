@@ -4,13 +4,23 @@ from typing import List, Dict, Any, Optional
 import numpy as np
 from collections import Counter
 import re
+from .comments import CommentExtractor
+from .layout import LayoutExtractor
+from .lexical import LexicalComplexityExtractor
+from .syntactic import SyntacticBiasExtractor
+from .flow import LogicFlowExtractor
 
 class LogicalDNAExtractor:
     def __init__(self):
         self.PY_LANGUAGE = Language(tspython.language())
         self.parser = Parser(self.PY_LANGUAGE)
+        self.comment_extractor = CommentExtractor()
+        self.layout_extractor = LayoutExtractor()
+        self.lexical_extractor = LexicalComplexityExtractor()
+        self.syntactic_extractor = SyntacticBiasExtractor()
+        self.flow_extractor = LogicFlowExtractor()
 
-    def extract(self, code: str, enabled_buckets: List[str] = None) -> Dict[str, Any]:
+    def extract(self, code: str, enabled_buckets: Optional[List[str]] = None) -> Dict[str, Any]:
         """
         Extracts features from Python code based on opted-in buckets.
 
@@ -20,15 +30,23 @@ class LogicalDNAExtractor:
 
         Returns:
             Dictionary of extracted features
-
-        Raises:
-            ValueError: If code is empty or parsing fails
         """
         if not code or not code.strip():
             raise ValueError("Code cannot be empty")
 
         if enabled_buckets is None:
-            enabled_buckets = ["structural_topology", "micro_stylistics", "logical_idioms"]
+            enabled_buckets = [
+                "structural_topology", 
+                "micro_stylistics", 
+                "logical_idioms",
+                "cfg_complexity",
+                "comment_stylistics",
+                "ast_trigrams",
+                "layout_rhythm",
+                "lexical_complexity",
+                "syntactic_bias",
+                "logic_flow"
+            ]
 
         try:
             tree = self.parser.parse(bytes(code, "utf8"))
@@ -46,6 +64,27 @@ class LogicalDNAExtractor:
             
         if "logical_idioms" in enabled_buckets:
             dna.update(self._extract_idiomatic(code, root_node))
+
+        if "cfg_complexity" in enabled_buckets:
+            dna.update(self._extract_cfg_complexity(code, root_node))
+
+        if "comment_stylistics" in enabled_buckets:
+            dna.update(self.comment_extractor.extract(code, root_node))
+
+        if "ast_trigrams" in enabled_buckets:
+            dna["top_trigrams"] = self._extract_trigrams(root_node)
+            
+        if "layout_rhythm" in enabled_buckets:
+            dna.update(self.layout_extractor.extract(code))
+            
+        if "lexical_complexity" in enabled_buckets:
+            dna.update(self.lexical_extractor.extract(code, root_node))
+            
+        if "syntactic_bias" in enabled_buckets:
+            dna.update(self.syntactic_extractor.extract(code, root_node))
+            
+        if "logic_flow" in enabled_buckets:
+            dna.update(self.flow_extractor.extract(code, root_node))
         
         return dna
 
@@ -145,3 +184,74 @@ class LogicalDNAExtractor:
             "try_except_count": try_excepts,
             "class_definition_count": classes
         }
+
+    def _extract_cfg_complexity(self, code: str, root_node: Node) -> Dict[str, Any]:
+        """
+        Analyzes Control Flow Graph complexity markers.
+        """
+        early_exits = []
+        while_trues = 0
+        while_total = 0
+        breaks = []
+
+        def traverse(node: Node, in_func: bool = False, depth_in_func: int = 0, func_total_lines: int = 0):
+            nonlocal while_trues, while_total
+            
+            # Identify early exits inside functions
+            if node.type in ('return_statement', 'raise_statement', 'continue_statement'):
+                if in_func:
+                    # Calculate relative position in function
+                    # (simplified as depth for now, but line offset is better)
+                    early_exits.append(node)
+            
+            if node.type == 'break_statement':
+                breaks.append(node)
+
+            if node.type == 'while_statement':
+                while_total += 1
+                # Check for 'while True:'
+                condition = node.child_by_field_name('condition')
+                if condition and condition.type == 'true':
+                    while_trues += 1
+
+            # Recurse with context
+            is_func = node.type == 'function_definition'
+            for child in node.children:
+                traverse(child, in_func=(in_func or is_func))
+
+        traverse(root_node)
+        
+        total_loc = len(code.splitlines())
+        
+        # Guard clause heuristic: exits that happen early in the AST/file
+        # For now, just count total early exits as density
+        exit_density = len(early_exits) / total_loc if total_loc > 0 else 0
+        
+        return {
+            "exit_density": exit_density,
+            "guard_clause_score": len([e for e in early_exits if e.start_point[0] < total_loc * 0.6]),
+            "while_true_ratio": while_trues / while_total if while_total > 0 else 0,
+            "break_statement_count": len(breaks)
+        }
+
+    def _extract_trigrams(self, root_node: Node) -> Dict[str, int]:
+        """
+        Extracts structural AST trigrams (sequences of 3 node types).
+        """
+        node_types = []
+
+        def traverse(node: Node):
+            # Filter out generic/noise nodes if needed, but for now take all
+            node_types.append(node.type)
+            for child in node.children:
+                traverse(child)
+
+        traverse(root_node)
+        
+        trigrams = []
+        for i in range(len(node_types) - 2):
+            trigrams.append(tuple(node_types[i:i+3]))
+        
+        # Return a counter of stringified trigrams
+        counts = Counter([f"{t[0]}:{t[1]}:{t[2]}" for t in trigrams])
+        return dict(counts)
