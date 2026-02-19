@@ -108,6 +108,25 @@ pytest tests/unit -v
 pytest tests/benchmarks -v -s
 ```
 
+## Dependency Injection (DI)
+
+The attestation engine supports dependency injection so you can plug in custom models:
+
+- `AttestationEngine(matcher_impl=..., consistency_impl=...)`
+- `matcher_impl` should implement an identity matcher with:
+  - `predict_probs(X_df_or_dict) -> list[(label, prob)]` for a single sample
+  - `save(path)`, `load(path)`, and `is_trained() -> bool`
+  - Fallback supported: if `predict_probs()` is missing, engine calls legacy `predict()`.
+- `consistency_impl` should implement an anomaly/consistency model with:
+  - `score(identity, X_df_or_dict) -> (prediction, score)` where `prediction` is `1` (normal), `-1` (anomaly), or `None` (unknown identity);
+    `score` is a float or `None` if unknown.
+  - `save(path)`, `load(path)`, and `is_trained() -> bool`
+  - Fallback supported: if `score()` is missing, engine calls legacy `check_consistency()`.
+
+Notes:
+- Unknown identities for consistency models should return `(None, None)` to standardize engine behavior across backends.
+- The engine now validates both models are trained via `is_trained()` before attestation, with a legacy fallback to checking `features` presence.
+
 ### Model Performance Metrics
 
 To get a detailed report of the current model's accuracy on the processed dataset:

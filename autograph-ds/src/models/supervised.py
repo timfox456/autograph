@@ -11,12 +11,14 @@ class RandomForestMatcher(IdentityModel):
         super().__init__()
         self.model = RandomForestClassifier(n_estimators=n_estimators, random_state=random_state)
         self.label_encoder = LabelEncoder()
+        self._trained = False
 
     def train(self, X, y, feature_names: list[str]):
         self.features = feature_names
         self.label_encoder.fit(y)
         encoded_y = self.label_encoder.transform(y)
         self.model.fit(X, encoded_y)
+        self._trained = True
 
     def predict_probs_batch(self, X_df) -> list[list[tuple[str, float]]]:
         """
@@ -49,6 +51,10 @@ class RandomForestMatcher(IdentityModel):
         self.model = data['model']
         self.label_encoder = data['label_encoder']
         self.features = data['features']
+        self._trained = True
+
+    def is_trained(self) -> bool:
+        return bool(self._trained and self.features)
 
 class IdentityMatcher:
     """

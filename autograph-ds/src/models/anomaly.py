@@ -12,6 +12,7 @@ class IsolationForestAnomaly(AnomalyModel):
         self.models = {} # identity -> model
         self.contamination = contamination
         self.random_state = random_state
+        self._trained = False
 
     def train(self, X, feature_names: list[str], identities: pd.Series):
         self.features = feature_names
@@ -24,6 +25,7 @@ class IsolationForestAnomaly(AnomalyModel):
             model = IsolationForest(contamination=self.contamination, random_state=self.random_state)
             model.fit(id_data)
             self.models[identity] = model
+        self._trained = True
 
     def score(self, identity: str, X_df: pd.DataFrame) -> tuple[Optional[int], Optional[float]]:
         if identity not in self.models:
@@ -48,6 +50,10 @@ class IsolationForestAnomaly(AnomalyModel):
         data = joblib.load(os.path.join(directory, 'consistency_models.joblib'))
         self.models = data['models']
         self.features = data['features']
+        self._trained = True
+
+    def is_trained(self) -> bool:
+        return bool(self._trained and self.models and self.features)
 
 class ConsistencyChecker:
     """

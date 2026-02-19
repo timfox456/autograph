@@ -58,8 +58,42 @@ class AttestationEngine:
         if not code or not code.strip():
             raise ValueError("Code cannot be empty")
 
-        if not hasattr(self.matcher, 'features') or not self.matcher.features:
+        # Ensure matcher is trained/loaded
+        matcher_trained = None
+        if hasattr(self.matcher, 'is_trained'):
+            try:
+                matcher_trained = bool(self.matcher.is_trained())
+            except Exception:
+                matcher_trained = None
+        if matcher_trained is None and hasattr(self.matcher, 'implementation') and hasattr(self.matcher.implementation, 'is_trained'):
+            try:
+                matcher_trained = bool(self.matcher.implementation.is_trained())
+            except Exception:
+                matcher_trained = None
+        if matcher_trained is None:
+            # Fallback to fragile check for legacy objects
+            matcher_trained = hasattr(self.matcher, 'features') and bool(getattr(self.matcher, 'features'))
+
+        if not matcher_trained:
             raise ValueError("Matcher model is not trained or loaded.")
+
+        # Ensure consistency checker is trained/loaded
+        consistency_trained = None
+        if hasattr(self.consistency, 'is_trained'):
+            try:
+                consistency_trained = bool(self.consistency.is_trained())
+            except Exception:
+                consistency_trained = None
+        if consistency_trained is None and hasattr(self.consistency, 'implementation') and hasattr(self.consistency.implementation, 'is_trained'):
+            try:
+                consistency_trained = bool(self.consistency.implementation.is_trained())
+            except Exception:
+                consistency_trained = None
+        if consistency_trained is None:
+            # Fallback: legacy objects expose features after training
+            consistency_trained = hasattr(self.consistency, 'features') and bool(getattr(self.consistency, 'features'))
+        if not consistency_trained:
+            raise ValueError("Consistency model is not trained or loaded.")
 
         # 1. Extract DNA
         try:
@@ -71,12 +105,26 @@ class AttestationEngine:
         # In a real system, we'd use the same process_dataset logic
         flat_dna = self._flatten_for_engine(dna)
         
-        # 2. Supervised Match
-        match_probs = self.matcher.predict(flat_dna)
+        # 2. Supervised Match (support both interface and legacy wrapper)
+        if hasattr(self.matcher, 'predict_probs'):
+            match_probs = self.matcher.predict_probs(flat_dna)
+        elif hasattr(self.matcher, 'predict'):
+            match_probs = self.matcher.predict(flat_dna)
+        elif hasattr(self.matcher, 'implementation') and hasattr(self.matcher.implementation, 'predict_probs'):
+            match_probs = self.matcher.implementation.predict_probs(flat_dna)
+        else:
+            raise AttributeError("Matcher implementation must provide predict_probs() or predict().")
         top_match, top_prob = match_probs[0]
         
-        # 3. Consistency Check
-        consistency_pred, consistency_score = self.consistency.check_consistency(claimed_identity, flat_dna)
+        # 3. Consistency Check (support both interface and legacy wrapper)
+        if hasattr(self.consistency, 'score'):
+            consistency_pred, consistency_score = self.consistency.score(claimed_identity, flat_dna)
+        elif hasattr(self.consistency, 'check_consistency'):
+            consistency_pred, consistency_score = self.consistency.check_consistency(claimed_identity, flat_dna)
+        elif hasattr(self.consistency, 'implementation') and hasattr(self.consistency.implementation, 'score'):
+            consistency_pred, consistency_score = self.consistency.implementation.score(claimed_identity, flat_dna)
+        else:
+            raise AttributeError("Consistency implementation must provide score() or check_consistency().")
         
         # 4. Heuristic Flags
         h_flags = self.heuristics.verify_metadata(code, claimed_identity)

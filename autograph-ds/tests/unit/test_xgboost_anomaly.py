@@ -31,8 +31,12 @@ def test_xgboost_anomaly_basic_flow(tmp_path):
 
 def test_xgboost_anomaly_feature_cleaning():
     """Test that XGBoostAnomaly handles illegal characters."""
-    X = pd.DataFrame({'node[type]': [1, 2], 'count<5>': [0.1, 0.2]})
-    identities = pd.Series(['A', 'B'])
+    # Provide multiple samples per identity for a meaningful fit
+    X = pd.DataFrame({
+        'node[type]': [1, 1.1, 0.9, 10, 10.1, 9.9],
+        'count<5>': [0.1, 0.12, 0.08, 0.9, 0.88, 0.92]
+    })
+    identities = pd.Series(['A', 'A', 'A', 'B', 'B', 'B'])
     feature_names = ['node[type]', 'count<5>']
 
     model = XGBoostAnomaly()
@@ -40,9 +44,16 @@ def test_xgboost_anomaly_feature_cleaning():
     
     assert 'node_type_' in model.features
     
-    test_df = pd.DataFrame({'node[type]': [1], 'count<5>': [0.1]})
-    pred, score = model.score('A', test_df)
-    assert pred != 0 # Should have trained
+    # Known-good sample for A should return a valid score
+    test_df_a = pd.DataFrame({'node[type]': [1.0], 'count<5>': [0.1]})
+    pred_a, score_a = model.score('A', test_df_a)
+    assert pred_a in [1, -1]
+    assert isinstance(score_a, float)
+
+    # Unknown identity should return (None, None)
+    pred_unknown, score_unknown = model.score('UNKNOWN_ID', test_df_a)
+    assert pred_unknown is None
+    assert score_unknown is None
 
 def test_xgboost_anomaly_save_load(tmp_path):
     X = pd.DataFrame({'f1': [1, 1.1, 0.9, 10], 'f2': [1, 0.9, 1.1, 10]})
@@ -52,11 +63,12 @@ def test_xgboost_anomaly_save_load(tmp_path):
     model = XGBoostAnomaly()
     model.train(X, feature_names, identities)
     
-    path = str(tmp_path / "anom.joblib")
-    model.save(path)
+    # Save to a directory (consistent with engine expectations)
+    save_dir = str(tmp_path / "anom_models")
+    model.save(save_dir)
 
     new_model = XGBoostAnomaly()
-    new_model.load(path)
+    new_model.load(save_dir)
 
     assert new_model.features == model.features
     assert 'A' in new_model.models

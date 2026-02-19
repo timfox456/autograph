@@ -5,7 +5,24 @@ class BaseModel(ABC):
     def __init__(self):
         self.features = []
 
-    def _prepare_features(self, X_df: Any) -> Any:
+    def _sanitize_feature_names(self, feature_names: list[str]) -> list[str]:
+        """
+        Sanitizes feature names for model compatibility by replacing characters
+        that some libraries disallow (e.g., XGBoost) and ensuring uniqueness.
+        """
+        clean_features: list[str] = []
+        seen: dict[str, int] = {}
+        for f in feature_names:
+            clean = f.replace('[', '_').replace(']', '_').replace('<', '_').replace('>', '_')
+            if clean in seen:
+                seen[clean] += 1
+                clean = f"{clean}_{seen[clean]}"
+            else:
+                seen[clean] = 0
+            clean_features.append(clean)
+        return clean_features
+
+    def _prepare_features(self, X_df: Any, expected_features: Optional[list[str]] = None) -> Any:
         """
         Ensures X_df has all expected features in the correct order.
         Missing features are filled with 0.
@@ -17,7 +34,8 @@ class BaseModel(ABC):
             # If it's a dict or single sample, convert to DataFrame
             X_df = pd.DataFrame([X_df])
 
-        missing_cols = [col for col in self.features if col not in X_df.columns]
+        expected = expected_features if expected_features is not None else self.features
+        missing_cols = [col for col in expected if col not in X_df.columns]
         if missing_cols:
             # Create a DataFrame of zeros for missing columns
             missing_data = pd.DataFrame(
@@ -29,7 +47,7 @@ class BaseModel(ABC):
         else:
             X_test = X_df.copy()
 
-        return X_test[self.features]
+        return X_test[expected]
 
 class IdentityModel(BaseModel):
     """
@@ -67,6 +85,11 @@ class IdentityModel(BaseModel):
         """Load the model from the specified path."""
         pass
 
+    @abstractmethod
+    def is_trained(self) -> bool:
+        """Returns True if the model has been trained/loaded and is ready."""
+        pass
+
 class AnomalyModel(BaseModel):
     """
     Interface for anomaly detection (consistency) models.
@@ -93,4 +116,9 @@ class AnomalyModel(BaseModel):
     @abstractmethod
     def load(self, path: str):
         """Load the model from the specified path."""
+        pass
+
+    @abstractmethod
+    def is_trained(self) -> bool:
+        """Returns True if the model has been trained/loaded and is ready."""
         pass

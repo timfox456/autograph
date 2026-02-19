@@ -5,6 +5,7 @@ import numpy as np
 import tempfile
 import shutil
 from src.models.supervised import IdentityMatcher
+from src.models.supervised import RandomForestMatcher
 from src.models.anomaly import ConsistencyChecker
 from src.models.heuristics import HeuristicDetector
 
@@ -50,6 +51,17 @@ def test_identity_matcher(mock_data_path, temp_dir):
     assert new_matcher.features == matcher.features
     results2 = new_matcher.predict(features)
     assert results2[0][0] == 'auth1'
+
+def test_random_forest_is_trained_flags(mock_data_path):
+    # Directly exercise the concrete model's is_trained state
+    df = pd.read_csv(mock_data_path)
+    X = df.drop(columns=['label', 'identity', 'filename'])
+    y = df['identity']
+
+    model = RandomForestMatcher()
+    assert model.is_trained() is False
+    model.train(X, y, X.columns.tolist())
+    assert model.is_trained() is True
 
 def test_consistency_checker(mock_data_path, temp_dir):
     consistency = ConsistencyChecker(models_dir=temp_dir)
