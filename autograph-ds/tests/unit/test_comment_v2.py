@@ -15,4 +15,4 @@ def foo():
     assert dna["emoji_density"] > 0
     assert dna["colorful_language_ratio"] > 0
     # 'WTF' and 'hack' are in the colorful list
-    assert dna["colorful_language_ratio"] == 1/3
+    assert dna["colorful_language_ratio"] == pytest.approx(1/3)

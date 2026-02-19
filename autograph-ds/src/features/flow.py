@@ -22,9 +22,9 @@ class LogicFlowExtractor:
             
             if node.type == 'call':
                 func = node.child_by_field_name('function')
-                if func:
+                if func and func.text:
                     name = func.text.decode('utf-8', errors='ignore')
-                    if name in ('map', 'filter', 'reduce', 'all', 'any'):
+                    if name in ('map', 'filter', 'reduce', 'all', 'any', 'sorted', 'zip', 'enumerate', 'sum', 'min', 'max'):
                         functional_markers += 1
 
             if node.type in ('for_statement', 'while_statement'):

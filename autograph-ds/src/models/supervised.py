@@ -9,7 +9,11 @@ from .base import IdentityModel
 class RandomForestMatcher(IdentityModel):
     def __init__(self, n_estimators=100, random_state=42):
         super().__init__()
-        self.model = RandomForestClassifier(n_estimators=n_estimators, random_state=random_state)
+        self.model = RandomForestClassifier(
+            n_estimators=n_estimators, 
+            random_state=random_state,
+            class_weight='balanced'
+        )
         self.label_encoder = LabelEncoder()
         self._trained = False
 
@@ -65,8 +69,25 @@ class IdentityMatcher:
         self.implementation = RandomForestMatcher()
         self.model_path = model_path
 
-    def train(self, data_path):
+    def train(self, data_path, oversample: bool = True):
         df = pd.read_csv(data_path)
+        
+        if oversample:
+            # Oversample minority classes to match the majority class count
+            counts = df['identity'].value_counts()
+            max_count = counts.max()
+            
+            oversampled_dfs = []
+            for identity, count in counts.items():
+                identity_df = df[df['identity'] == identity]
+                if count < max_count:
+                    # Duplicate samples to reach max_count
+                    identity_df = identity_df.sample(max_count, replace=True, random_state=42)
+                oversampled_dfs.append(identity_df)
+            
+            df = pd.concat(oversampled_dfs).sample(frac=1, random_state=42).reset_index(drop=True)
+            print(f"Oversampled dataset to {len(df)} samples ({max_count} per identity).")
+
         y = df['identity']
         X = df.drop(columns=['label', 'identity', 'filename'])
         self.implementation.train(X, y, X.columns.tolist())

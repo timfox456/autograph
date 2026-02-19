@@ -85,7 +85,7 @@ TRIGRAM_BUCKET = FeatureBucket(
     name="ast_trigrams",
     description="Top-K structural node sequences.",
     features=[
-        "top_trigrams",
+        "top_trigrams",  # note: flattened into 500+ features during vectorization
     ],
     privacy_level="High"
 )

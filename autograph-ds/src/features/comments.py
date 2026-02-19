@@ -42,10 +42,12 @@ class CommentExtractor:
             if node.type == 'comment':
                 comments.append(node)
             # Docstrings are often the first child of a block inside function_definition/class_definition
+            # or the first child of the module itself.
             elif node.type == 'string' and node.parent and node.parent.type == 'expression_statement':
-                if node.parent.parent and node.parent.parent.type == 'block':
-                    # Check if it's the first child of the block
-                    if node.parent.parent.children[0] == node.parent:
+                grandparent = node.parent.parent
+                if grandparent and grandparent.type in ('block', 'module'):
+                    # Check if it's the first child of the block/module
+                    if grandparent.children and grandparent.children[0] == node.parent:
                         docstrings.append(node)
             
             for child in node.children:
@@ -136,8 +138,6 @@ class CommentExtractor:
         for t in texts:
             # Look for multiple keywords or assignment
             words = set(re.findall(r'\b\w+\b', t))
-            if words.intersection(self.PY_KEYWORDS) or '=' in t:
-                # Heuristic: if it has '=' or more than one keyword
-                if len(words.intersection(self.PY_KEYWORDS)) >= 1 or '=' in t:
-                    count += 1
+            if words.intersection(self.PY_KEYWORDS) or re.search(r'\b\w+\s*=\s*', t):
+                count += 1
         return count

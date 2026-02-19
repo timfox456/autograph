@@ -2,10 +2,11 @@ import os
 from pathlib import Path
 import random
 import time
-from dotenv import load_dotenv
-
-# Load environment variables from .env if it exists
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    load_dotenv = None
 
 # Optional: Real LLM Clients
 try:
@@ -63,6 +64,14 @@ def generate_gemini_style(task_id):
     tasks = [
         f"def find_max_{task_id}(numbers):\n    if not numbers: return None\n    curr_max = numbers[0]\n    for n in numbers:\n        if n > curr_max: curr_max = n\n    return curr_max",
         f"def greet_user_{task_id}(name):\n    return f'Hello, {{name}}! Welcome to the system.'",
+    ]
+    return random.choice(tasks)
+
+def generate_deepseek_v3_style(task_id):
+    """DeepSeek-V3: Mixture of Experts style, uses advanced type hints and complex list/dict comprehension combinations."""
+    tasks = [
+        f"def get_prime_factors_{task_id}(n: int) -> list[int]:\n    factors = []\n    d = 2\n    while d * d <= n:\n        while (n % d) == 0:\n            factors.append(d)\n            n //= d\n        d += 1\n    if n > 1:\n        factors.append(n)\n    return factors",
+        f"def compute_metrics_{task_id}(data: list[dict]) -> dict[str, float]:\n    return {{k: sum(d[k] for d in data) / len(data) for k in data[0].keys()}} if data else {{}}"
     ]
     return random.choice(tasks)
 
@@ -144,10 +153,11 @@ def main():
         ("claude35", generate_claude_style, "ANTHROPIC_API_KEY"),
         ("gemini", generate_gemini_style, "GEMINI_API_KEY"),
         ("llama3", generate_llama_style, None),
-        ("deepseek", generate_deepseek_style, None)
+        ("deepseek", generate_deepseek_style, None),
+        ("deepseek_v3", generate_deepseek_v3_style, None)
     ]
     
-    TOTAL_TARGET = 50
+    TOTAL_TARGET = 100
     
     for model_name, generator, env_var in configs:
         real_samples = []

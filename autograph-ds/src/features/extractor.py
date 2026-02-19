@@ -30,6 +30,9 @@ class LogicalDNAExtractor:
 
         Returns:
             Dictionary of extracted features
+
+        Raises:
+            ValueError: If code is empty or fails to parse
         """
         if not code or not code.strip():
             raise ValueError("Code cannot be empty")
@@ -190,19 +193,21 @@ class LogicalDNAExtractor:
         Analyzes Control Flow Graph complexity markers.
         """
         early_exits = []
+        guard_clauses = 0
         while_trues = 0
         while_total = 0
         breaks = []
 
-        def traverse(node: Node, in_func: bool = False, depth_in_func: int = 0, func_total_lines: int = 0):
-            nonlocal while_trues, while_total
+        def traverse(node: Node, in_func: bool = False, func_start_line: int = -1):
+            nonlocal while_trues, while_total, guard_clauses
             
             # Identify early exits inside functions
             if node.type in ('return_statement', 'raise_statement', 'continue_statement'):
                 if in_func:
-                    # Calculate relative position in function
-                    # (simplified as depth for now, but line offset is better)
                     early_exits.append(node)
+                    # Guard clause heuristic: exit in the first 5 lines of a function
+                    if 0 <= node.start_point[0] - func_start_line < 5:
+                        guard_clauses += 1
             
             if node.type == 'break_statement':
                 breaks.append(node)
@@ -216,20 +221,21 @@ class LogicalDNAExtractor:
 
             # Recurse with context
             is_func = node.type == 'function_definition'
+            new_func_start = node.start_point[0] if is_func else func_start_line
+            
             for child in node.children:
-                traverse(child, in_func=(in_func or is_func))
+                traverse(child, in_func=(in_func or is_func), func_start_line=new_func_start)
 
         traverse(root_node)
         
         total_loc = len(code.splitlines())
         
-        # Guard clause heuristic: exits that happen early in the AST/file
-        # For now, just count total early exits as density
+        # Guard clause heuristic: exits that happen early in the function body
         exit_density = len(early_exits) / total_loc if total_loc > 0 else 0
         
         return {
             "exit_density": exit_density,
-            "guard_clause_score": len([e for e in early_exits if e.start_point[0] < total_loc * 0.6]),
+            "guard_clause_score": guard_clauses,
             "while_true_ratio": while_trues / while_total if while_total > 0 else 0,
             "break_statement_count": len(breaks)
         }

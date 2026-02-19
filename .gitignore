@@ -12,8 +12,7 @@ ENV/
 env/
 
 # Data and Models (generated)
-autograph-ds/research/data/processed/
-autograph-ds/research/models/
+autograph-ds/research/
 *.joblib
 
 # Jupyter

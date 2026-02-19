@@ -43,6 +43,7 @@ class LayoutExtractor:
         if consecutive > max_consecutive:
             max_consecutive = consecutive
 
+        # If there are no blank lines, the entire file is one chunk.
         return {
             "blank_line_ratio": num_blank / total_lines,
             "avg_vertical_chunk_size": float(np.mean(chunks)) if chunks else total_lines,
