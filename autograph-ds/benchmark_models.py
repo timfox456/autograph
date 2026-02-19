@@ -37,13 +37,11 @@ def benchmark():
             model.train(X_train, y_train, feature_names)
             train_time = time.time() - start_time
 
-            y_pred = []
             start_time = time.time()
-            for i in range(len(X_test)):
-                row_df = X_test.iloc[[i]]
-                probs = model.predict_probs(row_df)
-                y_pred.append(probs[0][0])
+            all_probs = model.predict_probs_batch(X_test)
             predict_time = (time.time() - start_time) / len(X_test)
+            
+            y_pred = [probs[0][0] for probs in all_probs]
 
             acc = accuracy_score(y_test, y_pred)
             results.append({

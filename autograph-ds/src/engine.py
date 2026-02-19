@@ -58,6 +58,9 @@ class AttestationEngine:
         if not code or not code.strip():
             raise ValueError("Code cannot be empty")
 
+        if not hasattr(self.matcher, 'features') or not self.matcher.features:
+            raise ValueError("Matcher model is not trained or loaded.")
+
         # 1. Extract DNA
         try:
             dna = self.extractor.extract(code, enabled_buckets)

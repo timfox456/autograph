@@ -18,32 +18,26 @@ class RandomForestMatcher(IdentityModel):
         encoded_y = self.label_encoder.transform(y)
         self.model.fit(X, encoded_y)
 
-    def predict_probs(self, X_df) -> list[tuple[str, float]]:
+    def predict_probs_batch(self, X_df) -> list[list[tuple[str, float]]]:
         """
-        Predicts identity probabilities from a DataFrame of features.
+        Predicts identity probabilities for multiple samples.
         """
-        # Ensure correct column order and handle missing
         X_test = self._prepare_features(X_df)
-        
-        probs = self.model.predict_proba(X_test)[0]
+        probs = self.model.predict_proba(X_test)
         classes = self.label_encoder.classes_
         
-        results = sorted(zip(classes, probs), key=lambda x: x[1], reverse=True)
-        return results
+        all_results = []
+        for sample_probs in probs:
+            results = sorted(zip(classes, sample_probs), key=lambda x: x[1], reverse=True)
+            all_results.append(results)
+        return all_results
 
-    def _prepare_features(self, X_df):
-        # Identify missing columns and add them all at once
-        missing_cols = [col for col in self.features if col not in X_df.columns]
-        if missing_cols:
-            missing_data = pd.DataFrame([[0] * len(missing_cols)], columns=missing_cols, index=X_df.index)
-            X_test = pd.concat([X_df, missing_data], axis=1)
-        else:
-            X_test = X_df.copy()
-
-        return X_test[self.features]
+    def predict_probs(self, X_df) -> list[tuple[str, float]]:
+        return self.predict_probs_batch(X_df)[0]
 
     def save(self, path):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if d := os.path.dirname(path):
+            os.makedirs(d, exist_ok=True)
         joblib.dump({
             'model': self.model,
             'label_encoder': self.label_encoder,

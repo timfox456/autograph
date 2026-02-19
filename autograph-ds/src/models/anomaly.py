@@ -37,15 +37,6 @@ class IsolationForestAnomaly(AnomalyModel):
         
         return prediction, score
 
-    def _prepare_features(self, X_df):
-        missing_cols = [col for col in self.features if col not in X_df.columns]
-        if missing_cols:
-            missing_data = pd.DataFrame([[0] * len(missing_cols)], columns=missing_cols, index=X_df.index)
-            X_test = pd.concat([X_df, missing_data], axis=1)
-        else:
-            X_test = X_df.copy()
-        return X_test[self.features]
-
     def save(self, directory):
         os.makedirs(directory, exist_ok=True)
         joblib.dump({
