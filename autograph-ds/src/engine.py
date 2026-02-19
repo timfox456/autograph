@@ -7,38 +7,38 @@ import numpy as np
 import os
 
 class AttestationEngine:
-    def __init__(self, matcher_path, consistency_dir):
+    def __init__(self, matcher_path=None, consistency_dir=None, matcher_impl=None, consistency_impl=None):
         """
-        Initialize the AttestationEngine with pre-trained models.
+        Initialize the AttestationEngine with models.
 
         Args:
             matcher_path: Path to the supervised matcher model file
             consistency_dir: Directory containing consistency checker models
-
-        Raises:
-            FileNotFoundError: If model files are not found
-            Exception: If models fail to load
+            matcher_impl: Optional IdentityModel implementation
+            consistency_impl: Optional AnomalyModel implementation
         """
-        if not os.path.exists(matcher_path):
-            raise FileNotFoundError(f"Matcher model not found at: {matcher_path}")
-        if not os.path.exists(consistency_dir):
-            raise FileNotFoundError(f"Consistency models directory not found at: {consistency_dir}")
-
         self.extractor = LogicalDNAExtractor()
-        self.matcher = IdentityMatcher()
-
-        try:
-            self.matcher.load(matcher_path)
-        except Exception as e:
-            raise Exception(f"Failed to load matcher model: {e}")
-
-        self.consistency = ConsistencyChecker()
-        try:
-            self.consistency.load(consistency_dir)
-        except Exception as e:
-            raise Exception(f"Failed to load consistency models: {e}")
-
         self.heuristics = HeuristicDetector()
+        
+        # Use provided implementations or default to legacy-compatible wrappers
+        self.matcher = matcher_impl if matcher_impl else IdentityMatcher()
+        self.consistency = consistency_impl if consistency_impl else ConsistencyChecker()
+
+        if matcher_path:
+            if not os.path.exists(matcher_path):
+                raise FileNotFoundError(f"Matcher model not found at: {matcher_path}")
+            try:
+                self.matcher.load(matcher_path)
+            except Exception as e:
+                raise Exception(f"Failed to load matcher model: {e}")
+        
+        if consistency_dir:
+            if not os.path.exists(consistency_dir):
+                raise FileNotFoundError(f"Consistency models directory not found at: {consistency_dir}")
+            try:
+                self.consistency.load(consistency_dir)
+            except Exception as e:
+                raise Exception(f"Failed to load consistency models: {e}")
 
     def attest(self, code, claimed_identity, enabled_buckets=None):
         """

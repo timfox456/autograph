@@ -3,59 +3,48 @@ import numpy as np
 from sklearn.ensemble import IsolationForest
 import joblib
 import os
+from typing import Optional
+from .base import AnomalyModel
 
-class ConsistencyChecker:
-    """
-    Maintains one anomaly detection model per identity.
-    """
-    def __init__(self, models_dir=None):
+class IsolationForestAnomaly(AnomalyModel):
+    def __init__(self, contamination=0.1, random_state=42):
+        super().__init__()
         self.models = {} # identity -> model
-        self.models_dir = models_dir
-        self.features = []
+        self.contamination = contamination
+        self.random_state = random_state
 
-    def train(self, data_path):
-        df = pd.read_csv(data_path)
-        self.features = df.drop(columns=['label', 'identity', 'filename']).columns.tolist()
+    def train(self, X, feature_names: list[str], identities: pd.Series):
+        self.features = feature_names
         
-        identities = df['identity'].unique()
-        for identity in identities:
-            id_data = df[df['identity'] == identity].drop(columns=['label', 'identity', 'filename'])
+        unique_identities = identities.unique()
+        for identity in unique_identities:
+            id_data = X[identities == identity]
             
-            # IsolationForest needs at least one sample, but ideally more.
-            # For the pilot, we'll train on what we have.
-            model = IsolationForest(contamination=0.1, random_state=42)
+            # IsolationForest needs at least one sample
+            model = IsolationForest(contamination=self.contamination, random_state=self.random_state)
             model.fit(id_data)
             self.models[identity] = model
-            print(f"Consistency model trained for identity: {identity}")
-            
-        if self.models_dir:
-            self.save(self.models_dir)
 
-    def check_consistency(self, identity, feature_dict):
-        """
-        Returns a score: 1 for consistent, -1 for outlier.
-        Also returns a continuous decision_function value (higher is more normal).
-        """
+    def score(self, identity: str, X_df: pd.DataFrame) -> tuple[Optional[int], Optional[float]]:
         if identity not in self.models:
             return None, None
 
         model = self.models[identity]
-
-        # Prepare data
-        X_test = pd.DataFrame([feature_dict])
-
-        # Identify missing columns and add them all at once to prevent DataFrame fragmentation
-        missing_cols = [col for col in self.features if col not in X_test.columns]
-        if missing_cols:
-            missing_data = pd.DataFrame([[0] * len(missing_cols)], columns=missing_cols)
-            X_test = pd.concat([X_test, missing_data], axis=1)
-
-        X_test = X_test[self.features]
+        X_test = self._prepare_features(X_df)
         
-        prediction = model.predict(X_test)[0]
-        score = model.decision_function(X_test)[0]
+        prediction = int(model.predict(X_test)[0])
+        score = float(model.decision_function(X_test)[0])
         
         return prediction, score
+
+    def _prepare_features(self, X_df):
+        missing_cols = [col for col in self.features if col not in X_df.columns]
+        if missing_cols:
+            missing_data = pd.DataFrame([[0] * len(missing_cols)], columns=missing_cols, index=X_df.index)
+            X_test = pd.concat([X_df, missing_data], axis=1)
+        else:
+            X_test = X_df.copy()
+        return X_test[self.features]
 
     def save(self, directory):
         os.makedirs(directory, exist_ok=True)
@@ -68,3 +57,29 @@ class ConsistencyChecker:
         data = joblib.load(os.path.join(directory, 'consistency_models.joblib'))
         self.models = data['models']
         self.features = data['features']
+
+class ConsistencyChecker:
+    """
+    Legacy wrapper for backward compatibility.
+    """
+    def __init__(self, models_dir=None):
+        self.implementation = IsolationForestAnomaly()
+        self.models_dir = models_dir
+
+    def train(self, data_path):
+        df = pd.read_csv(data_path)
+        features = df.drop(columns=['label', 'identity', 'filename'])
+        self.implementation.train(features, features.columns.tolist(), df['identity'])
+            
+        if self.models_dir:
+            self.save(self.models_dir)
+
+    def check_consistency(self, identity, feature_dict):
+        X_test = pd.DataFrame([feature_dict])
+        return self.implementation.score(identity, X_test)
+
+    def save(self, directory):
+        self.implementation.save(directory)
+
+    def load(self, directory):
+        self.implementation.load(directory)
