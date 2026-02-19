@@ -1,8 +1,8 @@
 import pytest
 import pandas as pd
-import numpy as np
-from src.models.xgboost_models import XGBoostMatcher
-import os
+
+xgb = pytest.importorskip("xgboost", reason="xgboost not installed")
+from src.models.xgboost_models import XGBoostMatcher  # noqa: E402
 
 def test_xgboost_matcher_basic_flow(tmp_path):
     """Test training and prediction with XGBoostMatcher."""
