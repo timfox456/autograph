@@ -5,8 +5,11 @@ from src.models.heuristics import HeuristicDetector
 from src.utils import flatten_dna
 import numpy as np
 import os
+import math
 
 class AttestationEngine:
+    AI_IDENTITIES = frozenset(['deepseek', 'gpt4o', 'gemini'])
+    
     def __init__(self, matcher_path=None, consistency_dir=None, matcher_impl=None, consistency_impl=None):
         """
         Initialize the AttestationEngine with models.
@@ -19,7 +22,7 @@ class AttestationEngine:
         """
         self.extractor = LogicalDNAExtractor()
         self.heuristics = HeuristicDetector()
-        
+
         # Use provided implementations or default to legacy-compatible wrappers
         self.matcher = matcher_impl if matcher_impl else IdentityMatcher()
         self.consistency = consistency_impl if consistency_impl else ConsistencyChecker()
@@ -130,17 +133,21 @@ class AttestationEngine:
         h_flags = self.heuristics.verify_metadata(code, claimed_identity)
         h_markers = self.heuristics.detect_markers(code)
         
-        # 5. Combine results
+        # 5. Compute extended metrics
+        corpus_probability = self._compute_corpus_probability(match_probs, claimed_identity)
+        corpus_percentile = self._compute_corpus_percentile(consistency_score, claimed_identity)
+        ai_probability, detected_ai_identity, detected_ai_prob = self._compute_ai_probability(match_probs)
+        
+        # 6. Combine results
         is_match = (top_match == claimed_identity)
         confidence = top_prob
         
         # Scale confidence based on consistency and heuristics
         if consistency_pred == -1:
-            confidence *= 0.5 # Significant penalty for anomaly
-            
+            confidence *= 0.5
         if h_flags:
-            confidence *= 0.2 # Massive penalty for contradictory markers
-            
+            confidence *= 0.2
+        
         # Information density calculation
         bucket_count = len(enabled_buckets) if enabled_buckets else 3
         density_score = bucket_count / 3.0
@@ -150,13 +157,90 @@ class AttestationEngine:
             "detected_identity": top_match,
             "is_match": is_match,
             "confidence": float(confidence),
+            "corpus_probability": float(corpus_probability),
+            "corpus_percentile": float(corpus_percentile),
             "consistency": "PASS" if consistency_pred == 1 else "FAIL" if consistency_pred == -1 else "UNKNOWN",
             "consistency_score": float(consistency_score) if consistency_score is not None else 0.0,
+            "ai_probability": float(ai_probability),
+            "detected_ai_identity": detected_ai_identity,
+            "detected_ai_probability": float(detected_ai_prob) if detected_ai_prob else 0.0,
             "flags": h_flags,
             "markers": h_markers,
             "privacy_density": density_score,
             "verdict": self._get_verdict(is_match, confidence, consistency_pred, h_flags)
         }
+
+    def _compute_corpus_probability(self, match_probs, claimed_identity):
+        """
+        Compute corpus probability for claimed identity.
+        
+        Args:
+            match_probs: List of (identity, probability) tuples from predict_probs
+            claimed_identity: The identity claiming authorship
+        
+        Returns:
+            float: Probability that code belongs to claimed identity's corpus
+        """
+        # Find probability for claimed identity
+        claimed_prob = None
+        for identity, prob in match_probs:
+            if identity == claimed_identity:
+                claimed_prob = prob
+                break
+        
+        if claimed_prob is None:
+            return 0.0
+
+        # Normalize across all class probabilities.
+        # When the model outputs a proper probability distribution (predict_proba /
+        # softmax), the sum equals 1.0 and this division is identity — equivalent
+        # to just returning claimed_prob directly.  The explicit normalization is a
+        # defensive guard for callers that pass raw logits or non-normalized scores.
+        other_probs_sum = sum(p for i, p in match_probs if i != claimed_identity)
+        if other_probs_sum == 0:
+            return 1.0
+
+        return claimed_prob / (claimed_prob + other_probs_sum)
+
+    def _compute_corpus_percentile(self, consistency_score, claimed_identity):  # noqa: ARG002
+        """
+        Compute percentile of consistency score within claimed identity's corpus.
+
+        Args:
+            consistency_score: Raw anomaly score from IsolationForest
+            claimed_identity: Reserved for future per-identity score calibration
+                              using empirical score distributions from training data.
+
+        Returns:
+            float: Percentile [0.0, 1.0] where 1.0 = most consistent
+        """
+        # Sigmoid approximation — maps (-inf, +inf) to (0, 1).
+        # TODO: replace with a per-identity empirical CDF fitted on training-set scores
+        # once that calibration data is collected (requires per-identity score histograms).
+        if consistency_score is None:
+            return 0.5
+
+        return 1.0 / (1.0 + math.exp(-consistency_score))
+
+    def _compute_ai_probability(self, match_probs):
+        """
+        Compute probability that code is AI-generated.
+        
+        Args:
+            match_probs: List of (identity, probability) tuples
+        
+        Returns:
+            tuple: (ai_probability, top_ai_identity, top_ai_probability)
+        """
+        ai_probs = [(i, p) for i, p in match_probs if i in self.AI_IDENTITIES]
+        
+        if not ai_probs:
+            return 0.0, None, 0.0
+        
+        ai_probability = sum(p for _, p in ai_probs)
+        top_ai = max(ai_probs, key=lambda x: x[1])
+        
+        return ai_probability, top_ai[0], top_ai[1]
 
     def _get_verdict(self, is_match, confidence, consistency, flags):
         if flags:
