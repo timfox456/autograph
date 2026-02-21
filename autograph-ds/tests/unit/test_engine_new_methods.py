@@ -22,10 +22,10 @@ def test_compute_corpus_probability(engine):
     prob_d = engine._compute_corpus_probability(match_probs, 'user_d')
     assert prob_d == 0.0
 
-    # Test with no other probabilities
+    # Test with no other probabilities - returns claimed_prob directly
     match_probs_single = [('user_a', 0.9)]
     prob_single = engine._compute_corpus_probability(match_probs_single, 'user_a')
-    assert prob_single == pytest.approx(1.0)
+    assert prob_single == pytest.approx(0.9)
 
 def test_compute_corpus_percentile(engine):
     # Test with a positive score

@@ -78,22 +78,22 @@ def run_demo():
     print("Full Report:")
     print(json.dumps(report3, indent=2))
 
-    # Scenario 4: Spoofing (DeepSeek claimed as GPT-4)
-    print("\nScenario 4: Spoofing (DeepSeek code claimed as gpt4o)")
-    with open(base / "research/data/raw/ai_deepseek_v3_0.py", "r") as f:
-        ds_code = f.read()
+    # Scenario 4: Spoofing (Claude claimed as GPT-4)
+    print("\nScenario 4: Spoofing (Claude code claimed as gpt4o)")
+    with open(base / "research/data/raw/ai_claude_0.py", "r") as f:
+        claude_code = f.read()
     
-    report4 = engine.attest(ds_code, "gpt4o")
-    print_attestation_report(report4, "Scenario 4: AI Spoofing - DeepSeek Claimed as GPT-4")
+    report4 = engine.attest(claude_code, "gpt4o")
+    print_attestation_report(report4, "Scenario 4: AI Spoofing - Claude Claimed as GPT-4")
     print("Full Report:")
     print(json.dumps(report4, indent=2))
 
-    # Scenario 5: Privacy Sparsity (Kenneth code with only Structural features)
-    print("\nScenario 5: Privacy Sparsity (Kenneth code claimed as Kenneth, Structural ONLY)")
-    with open(base / "research/data/raw/human_kenneth_0.py", "r") as f:
-        kenneth_code = f.read()
+    # Scenario 5: Privacy Sparsity (Hynek code with only Structural features)
+    print("\nScenario 5: Privacy Sparsity (Hynek code claimed as Hynek, Structural ONLY)")
+    with open(base / "research/data/raw/human_hynek_0.py", "r") as f:
+        hynek_code = f.read()
     
-    report5 = engine.attest(kenneth_code, "kenneth", enabled_buckets=["structural_topology"])
+    report5 = engine.attest(hynek_code, "hynek", enabled_buckets=["structural_topology"])
     print_attestation_report(report5, "Scenario 5: Privacy-Preserving Attestation")
     print("Full Report:")
     print(json.dumps(report5, indent=2))

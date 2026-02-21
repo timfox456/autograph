@@ -90,7 +90,7 @@ def test_custom_ai_self_attestation():
 
 def test_human_spoofing_custom_ai():
     """Scenario 2: Human code claimed as MyBot 1.0. MISMATCH."""
-    matcher = MyBotMatcher([("mariusz", 0.70), ("kenneth", 0.15), ("gpt4o", 0.10), ("mybot_v1", 0.05)])
+    matcher = MyBotMatcher([("mariusz", 0.70), ("raymond", 0.15), ("gpt4o", 0.10), ("mybot_v1", 0.05)])
     consistency = MyBotConsistency(pred=-1, score_val=-0.3)
     engine = AttestationEngine(matcher_impl=matcher, consistency_impl=consistency)
 
@@ -136,4 +136,6 @@ def test_custom_ai_corpus_drift():
     assert result["detected_ai_identity"] == "mybot_v1"
     assert result["confidence"] < 0.30
     assert result["consistency"] == "FAIL"
-    assert result["verdict"] == "MISMATCH"
+    # With new verdict logic: corpus_probability 0.50 >= 0.3 → UNCERTAIN
+    # Consistency FAIL reduces confidence but doesn't change verdict from match
+    assert result["verdict"] == "UNCERTAIN"

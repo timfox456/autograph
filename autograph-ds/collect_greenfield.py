@@ -66,6 +66,18 @@ def _run_gh(cmd: list[str], max_attempts: int = 5, base_sleep: float = 1.0) -> s
             time.sleep(sleep_s)
 
 
+GITHUB_BOT_LOGINS = frozenset({"web-flow", "github-actions[bot]", "dependabot[bot]"})
+GITHUB_NOREPLY_SUFFIXES = ("@users.noreply.github.com", "noreply@github.com")
+
+
+def _is_github_bot_committer(login: str | None, email: str | None) -> bool:
+    if login and login.lower() in GITHUB_BOT_LOGINS:
+        return True
+    if email and any(email.lower().endswith(s) for s in GITHUB_NOREPLY_SUFFIXES):
+        return True
+    return False
+
+
 def _is_misattributed(commit_data: dict) -> bool:
     """
     Check if the commit appears to be authored by someone else but merged/committed by the target.
@@ -77,6 +89,9 @@ def _is_misattributed(commit_data: dict) -> bool:
     cc = (commit_data.get("commit") or {}).get("committer") or {}
     author_email = ca.get("email")
     committer_email = cc.get("email")
+
+    if _is_github_bot_committer(committer_login, committer_email):
+        return False
 
     if (author_login and committer_login and author_login != committer_login) or (
         author_email and committer_email and author_email != committer_email
@@ -126,7 +141,7 @@ def main():
         {"repo": "python-attrs/attrs", "authors": ["hynek"], "name": "hynek"},
         {"repo": "pyca/cryptography", "authors": ["alex"], "name": "alex"},
         {"repo": "django/django", "authors": ["felixxm"], "name": "mariusz"},
-        {"repo": "psf/requests", "authors": ["kennethreitz"], "name": "kenneth"},
+        {"repo": "python/cpython", "authors": ["rhettinger"], "name": "raymond"},
         {"repo": "pallets/flask", "authors": ["davidism"], "name": "david"},
         {"repo": "tiangolo/fastapi", "authors": ["tiangolo"], "name": "sebastian"},
         {"repo": "psf/black", "authors": ["ambv"], "name": "lukasz"},
@@ -136,6 +151,11 @@ def main():
         {"repo": "Textualize/rich", "authors": ["willmcgugan"], "name": "will"},
         {"repo": "twisted/twisted", "authors": ["glyph"], "name": "glyph"},
         {"repo": "sigmavirus24/github3.py", "authors": ["sigmavirus24"], "name": "ian"},
+        {"repo": "nedbat/coveragepy", "authors": ["nedbat"], "name": "ned"},
+        {"repo": "hukkin/tomli", "authors": ["hukkin"], "name": "taneli"},
+        {"repo": "pandas-dev/pandas", "authors": ["jorisvandenbossche"], "name": "joris"},
+        {"repo": "jakevdp/altair", "authors": ["jakevdp"], "name": "jake"},
+        {"repo": "astropy/astropy", "authors": ["astrofrog"], "name": "thomas"},
     ]
 
     base = Path(__file__).parent

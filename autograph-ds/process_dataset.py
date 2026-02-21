@@ -53,9 +53,9 @@ def main():
     for identity, count in sorted(skipped.items(), key=lambda x: -x[1]):
         print(f"  {identity}: {count} skipped")
 
-    # 2. Select Top 500 Trigrams
-    top_trigrams = [t for t, count in global_trigram_counts.most_common(500)]
-    print(f"Selected Top 500 trigrams out of {len(global_trigram_counts)} unique sequences.")
+    # 2. Select Top 150 Trigrams (reduced from 500 to prevent overfitting)
+    top_trigrams = [t for t, count in global_trigram_counts.most_common(150)]
+    print(f"Selected Top 150 trigrams out of {len(global_trigram_counts)} unique sequences.")
     
     # 3. Flatten and filter
     rows = []
@@ -71,22 +71,28 @@ def main():
         flat_dna = flatten_dna(dna)
         
         # Labeling
+        # Parse identity from filename: human_{identity}_{index}.py or ai_{identity}_{index}.py
+        # Handles multi-part identities like "deepseek_v3" correctly
         if filename.startswith("human_"):
             flat_dna["label"] = "human"
-            parts = filename.split("_")
-            if len(parts) >= 2:
-                flat_dna["identity"] = parts[1]
-            else:
-                flat_dna["identity"] = filename.replace("human_", "").replace(".py", "")
+            # Remove prefix and extension, extract identity (everything before _{number}.py)
+            name_without_prefix = filename[6:]  # Remove "human_"
         else:
             flat_dna["label"] = "ai"
-            parts = filename.split("_")
-            if len(parts) >= 2:
-                flat_dna["identity"] = parts[1]
-            else:
-                flat_dna["identity"] = filename.replace("ai_", "").replace(".py", "")
+            name_without_prefix = filename[3:]  # Remove "ai_"
         
-        flat_dna["identity"] = flat_dna["identity"].replace(".py", "").replace("human_", "")
+        # Remove .py extension
+        name_without_ext = name_without_prefix.replace(".py", "")
+        # Split by _ and reconstruct identity (all parts except the last number)
+        parts = name_without_ext.split("_")
+        if len(parts) >= 2 and parts[-1].isdigit():
+            # Last part is the index number, identity is everything before it
+            flat_dna["identity"] = "_".join(parts[:-1])
+        elif len(parts) >= 1:
+            # Fallback: just take everything (no index)
+            flat_dna["identity"] = "_".join(parts)
+        else:
+            flat_dna["identity"] = name_without_ext
         flat_dna["filename"] = filename
         rows.append(flat_dna)
         

@@ -140,7 +140,7 @@ python report_metrics.py
 The dataset currently contains ~490 samples across 7 distinct identities (AIs and Humans).
 
 - **AI models**: GPT-4o, Claude 3.5, DeepSeek V3, Llama 3, Gemini
-- **Human authors**: mariusz, kenneth (and others from greenfield collection)
+- **Human authors**: mariusz, raymond (and others from greenfield collection)
 
 ## License
 

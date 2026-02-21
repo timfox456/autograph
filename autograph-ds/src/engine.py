@@ -167,7 +167,7 @@ class AttestationEngine:
             "flags": h_flags,
             "markers": h_markers,
             "privacy_density": density_score,
-            "verdict": self._get_verdict(is_match, confidence, consistency_pred, h_flags)
+            "verdict": self._get_verdict(is_match, corpus_probability, consistency_pred, h_flags)
         }
 
     def _compute_corpus_probability(self, match_probs, claimed_identity):
@@ -198,7 +198,8 @@ class AttestationEngine:
         # defensive guard for callers that pass raw logits or non-normalized scores.
         other_probs_sum = sum(p for i, p in match_probs if i != claimed_identity)
         if other_probs_sum == 0:
-            return 1.0
+            # Only one identity in results - return its probability directly
+            return claimed_prob
 
         return claimed_prob / (claimed_prob + other_probs_sum)
 
@@ -242,12 +243,31 @@ class AttestationEngine:
         
         return ai_probability, top_ai[0], top_ai[1]
 
-    def _get_verdict(self, is_match, confidence, consistency, flags):
+    def _get_verdict(self, is_match, corpus_probability, consistency, flags):
+        """
+        Determine attestation verdict based on match and corpus probability.
+        
+        Uses corpus_probability (probability of claimed identity) rather than
+        confidence (which may be scaled by consistency penalties) to ensure
+        correct matches aren't marked as MISMATCH due to secondary signals.
+        
+        Args:
+            is_match: Whether detected identity matches claimed identity
+            corpus_probability: Probability that code belongs to claimed identity's corpus
+            consistency: Consistency check result (1=PASS, -1=FAIL, None=UNKNOWN)
+            flags: Heuristic flags indicating potential spoofing
+        
+        Returns:
+            str: One of VERIFIED, UNCERTAIN, MISMATCH, SPOOFING_DETECTED
+        """
         if flags:
             return "SPOOFING_DETECTED"
-        if is_match and confidence > 0.7 and consistency == 1:
+        if not is_match:
+            return "MISMATCH"
+        # is_match is True - evaluate confidence based on corpus_probability
+        if corpus_probability >= 0.6:
             return "VERIFIED"
-        if is_match and confidence > 0.4:
+        if corpus_probability >= 0.3:
             return "UNCERTAIN"
         return "MISMATCH"
 
