@@ -4,25 +4,35 @@ Generate AI Code Samples from Real LLM APIs
 This script fetches genuine code samples from various AI models using their APIs.
 It replaces synthetic stubs with real model outputs for authentic attestation training.
 
+Robustness features:
+  - Idempotent: re-running will only collect missing samples (never overwrites)
+  - Incremental: each file is saved immediately after collection
+  - Deterministic: prompt N always maps to sample index N (no random.sample)
+  - Deduplicated: content-hashed to prevent near-duplicate samples across runs
+  - Validated: syntax-checked and minimum line count enforced
+  - Auditable: sidecar .json written per sample (model, prompt, hash, timestamp)
+
 Required environment variables (in .env file):
-    OPENAI_API_KEY - For GPT-4o samples
-    ANTHROPIC_API_KEY - For Claude 3.5 samples
-    GEMINI_API_KEY - For Gemini samples
-    OPENCODE_API_KEY - For DeepSeek samples
+    OPENAI_API_KEY    - For GPT-4o samples
+    ANTHROPIC_API_KEY - For Claude samples
+    GEMINI_API_KEY    - For Gemini samples
+    DEEPSEEK_API_KEY  - For DeepSeek V3 samples (platform.deepseek.com)
+    OPENCODE_API_KEY  - For Kimi K2 samples via OpenCode Zen (opencode.ai)
 """
 
+import hashlib
+import json
 import os
-from pathlib import Path
-import random
 import time
+from pathlib import Path
+
 import requests
 
 # Load .env from project root (parent of autograph-ds)
 from dotenv import load_dotenv
-env_path = Path(__file__).parent.parent / ".env"
-load_dotenv(env_path)
+load_dotenv(Path(__file__).parent.parent / ".env")
 
-# Optional: Real LLM Clients
+# Optional LLM clients
 try:
     from openai import OpenAI
 except ImportError:
@@ -41,8 +51,14 @@ except ImportError:
     types = None
 
 
-# --- Expanded Prompts for More Diverse Samples ---
+# --- Configuration ---
 
+TARGET_PER_MODEL = 15
+MIN_LINES = 3        # total lines (splitlines)
+MIN_CODE_LINES = 3   # non-blank, non-comment lines
+
+# Fixed ordered prompts — index N always produces sample N.
+# Add new prompts at the END to avoid shifting existing assignments.
 PROMPTS = [
     "Write a Python function to calculate the Fibonacci sequence up to N.",
     "Write a Python class for a simple Bank Account with deposit and withdraw methods.",
@@ -72,10 +88,32 @@ PROMPTS = [
 ]
 
 
+# --- Utility Functions ---
+
+def _content_hash(content: str) -> str:
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+
+
+def _is_valid_python(code: str) -> bool:
+    try:
+        compile(code, "<string>", "exec")
+        return True
+    except SyntaxError:
+        return False
+
+
+def _count_code_lines(code: str) -> int:
+    count = 0
+    for line in code.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            count += 1
+    return count
+
+
 def clean_code(code: str) -> str:
-    """Clean up code by removing markdown fences and extra whitespace."""
+    """Strip markdown fences and leading/trailing blank lines."""
     code = code.replace("```python", "").replace("```", "").strip()
-    # Remove leading/trailing blank lines
     lines = code.splitlines()
     while lines and not lines[0].strip():
         lines.pop(0)
@@ -84,209 +122,259 @@ def clean_code(code: str) -> str:
     return "\n".join(lines)
 
 
-def fetch_openai_samples(api_key, model="gpt-4o", count=25):
-    """Fetch real samples from OpenAI API."""
-    samples = []
+# --- Per-Provider Single-Call Fetch Functions ---
+# Each returns a callable fetch_fn(prompt: str) -> str (raw LLM output).
+# Returns None if the provider is unavailable (missing key or SDK).
+
+def _make_openai_fetcher(api_key, model):
     if not api_key or not OpenAI:
-        print(f"  Skipping {model}: OpenAI not available")
-        return samples
-    
+        return None
     client = OpenAI(api_key=api_key)
-    selected_prompts = random.sample(PROMPTS, min(count, len(PROMPTS)))
-    
-    for i, prompt in enumerate(selected_prompts):
-        try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": f"{prompt} Output ONLY the Python code, no explanation."}],
-                temperature=0.7,
-            )
-            code = clean_code(response.choices[0].message.content)
-            if len(code.splitlines()) >= 3:
-                samples.append(code)
-                print(f"  Sample {i+1}/{len(selected_prompts)}: {len(code.splitlines())} lines")
-            else:
-                print(f"  Sample {i+1}: too short ({len(code.splitlines())} lines)")
-            time.sleep(0.5)
-        except Exception as e:
-            print(f"  Error on sample {i+1}: {e}")
-            time.sleep(1)
-    
-    return samples
+
+    def fetch(prompt):
+        r = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": f"{prompt} Output ONLY the Python code, no explanation."}],
+            temperature=0.7,
+        )
+        return r.choices[0].message.content
+
+    return fetch
 
 
-def fetch_anthropic_samples(api_key, model="claude-3-5-sonnet-20241022", count=25):
-    """Fetch real samples from Anthropic API."""
-    samples = []
+def _make_anthropic_fetcher(api_key, model):
     if not api_key or not anthropic:
-        print(f"  Skipping {model}: Anthropic not available")
-        return samples
-    
+        return None
     client = anthropic.Anthropic(api_key=api_key)
-    selected_prompts = random.sample(PROMPTS, min(count, len(PROMPTS)))
-    
-    for i, prompt in enumerate(selected_prompts):
-        try:
-            response = client.messages.create(
-                model=model,
-                max_tokens=2048,
-                messages=[{"role": "user", "content": f"{prompt} Output ONLY the Python code, no explanation."}]
-            )
-            code = clean_code(response.content[0].text)
-            if len(code.splitlines()) >= 3:
-                samples.append(code)
-                print(f"  Sample {i+1}/{len(selected_prompts)}: {len(code.splitlines())} lines")
-            else:
-                print(f"  Sample {i+1}: too short ({len(code.splitlines())} lines)")
-            time.sleep(0.5)
-        except Exception as e:
-            print(f"  Error on sample {i+1}: {e}")
-            time.sleep(1)
-    
-    return samples
+
+    def fetch(prompt):
+        r = client.messages.create(
+            model=model,
+            max_tokens=2048,
+            messages=[{"role": "user", "content": f"{prompt} Output ONLY the Python code, no explanation."}],
+        )
+        return r.content[0].text
+
+    return fetch
 
 
-def fetch_gemini_samples(api_key, model="gemini-2.5-flash", count=15):
-    """Fetch real samples from Google Gemini API using new google.genai SDK."""
-    samples = []
+def _make_gemini_fetcher(api_key, model):
     if not api_key or not genai:
-        print(f"  Skipping {model}: Gemini not available")
-        return samples
-    
-    # Initialize client with API key
+        return None
     client = genai.Client(api_key=api_key)
-    
-    # Configure for code generation
     config = types.GenerateContentConfig(
-        system_instruction="You are an expert Python developer. Provide only high-quality, PEP 8 compliant code without explanations.",
+        system_instruction=(
+            "You are an expert Python developer. "
+            "Provide only high-quality, PEP 8 compliant code without explanations."
+        ),
         temperature=0.3,
     )
-    
-    selected_prompts = random.sample(PROMPTS, min(count, len(PROMPTS)))
-    
-    for i, prompt in enumerate(selected_prompts):
-        try:
-            response = client.models.generate_content(
-                model=model,
-                contents=f"{prompt} Output ONLY the Python code, no explanation.",
-                config=config
-            )
-            code = clean_code(response.text)
-            if len(code.splitlines()) >= 3:
-                samples.append(code)
-                print(f"  Sample {i+1}/{len(selected_prompts)}: {len(code.splitlines())} lines")
-            else:
-                print(f"  Sample {i+1}: too short ({len(code.splitlines())} lines)")
-            time.sleep(0.5)
-        except Exception as e:
-            print(f"  Error on sample {i+1}: {e}")
-            time.sleep(1)
-    
-    return samples
+
+    def fetch(prompt):
+        r = client.models.generate_content(
+            model=model,
+            contents=f"{prompt} Output ONLY the Python code, no explanation.",
+            config=config,
+        )
+        return r.text
+
+    return fetch
 
 
-def fetch_deepseek_samples(api_key, model="deepseek-chat", count=25):
-    """Fetch real samples from DeepSeek API."""
-    samples = []
+def _make_deepseek_fetcher(api_key, model):
     if not api_key:
-        print(f"  Skipping {model}: OPENCODE_API_KEY not set")
-        return samples
-    
-    selected_prompts = random.sample(PROMPTS, min(count, len(PROMPTS)))
-    
-    for i, prompt in enumerate(selected_prompts):
+        return None
+
+    def fetch(prompt):
+        r = requests.post(
+            "https://api.deepseek.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": model,
+                "messages": [{"role": "user", "content": f"{prompt} Output ONLY the Python code, no explanation."}],
+                "temperature": 0.7,
+            },
+            timeout=60,
+        )
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"]
+
+    return fetch
+
+
+def _make_kimi_fetcher(api_key, model):
+    """Kimi K2 via OpenCode Zen (OpenAI-compatible gateway)."""
+    if not api_key or not OpenAI:
+        return None
+    client = OpenAI(api_key=api_key, base_url="https://opencode.ai/zen/v1/")
+
+    def fetch(prompt):
+        r = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": f"{prompt} Output ONLY the Python code, no explanation."}],
+            max_tokens=2048,
+            temperature=0.7,
+        )
+        return r.choices[0].message.content
+
+    return fetch
+
+
+# --- Core Collection Loop ---
+
+def collect_for_identity(identity, model_name, fetch_fn, output_dir, seen_hashes, target=TARGET_PER_MODEL):
+    """
+    Collect AI code samples for one model identity.
+
+    Idempotent: checks existing files by index, only fills gaps up to `target`.
+    Saves each file immediately with a .json sidecar. Updates seen_hashes in-place.
+
+    Returns the number of newly collected samples.
+    """
+    # Determine which indices already exist on disk
+    existing_indices = set()
+    for f in output_dir.glob(f"ai_{identity}_*.py"):
         try:
-            response = requests.post(
-                "https://api.deepseek.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": model,
-                    "messages": [{"role": "user", "content": f"{prompt} Output ONLY the Python code, no explanation."}],
-                    "temperature": 0.7,
-                },
-                timeout=60
-            )
-            response.raise_for_status()
-            data = response.json()
-            code = clean_code(data["choices"][0]["message"]["content"])
-            if len(code.splitlines()) >= 3:
-                samples.append(code)
-                print(f"  Sample {i+1}/{len(selected_prompts)}: {len(code.splitlines())} lines")
-            else:
-                print(f"  Sample {i+1}: too short ({len(code.splitlines())} lines)")
-            time.sleep(0.5)
+            existing_indices.add(int(f.stem.rsplit("_", 1)[-1]))
+        except ValueError:
+            pass
+
+    current_count = len(existing_indices)
+
+    if current_count >= target:
+        print(f"  {identity}: already have {current_count}/{target}, skipping.")
+        return 0
+
+    needed = target - current_count
+    print(f"  {identity}: have {current_count}/{target}, collecting {needed} more...")
+
+    collected = 0
+    skipped = {"too_short": 0, "invalid_python": 0, "duplicate": 0, "error": 0}
+
+    for idx in range(target):
+        if collected >= needed:
+            break
+        if idx in existing_indices:
+            continue
+
+        prompt = PROMPTS[idx % len(PROMPTS)]
+
+        try:
+            raw = fetch_fn(prompt)
         except Exception as e:
-            print(f"  Error on sample {i+1}: {e}")
+            print(f"    [{identity}] idx {idx}: API error — {e}")
+            skipped["error"] += 1
             time.sleep(1)
-    
-    return samples
+            continue
+
+        code = clean_code(raw)
+
+        if len(code.splitlines()) < MIN_LINES:
+            print(f"    [{identity}] idx {idx}: too short ({len(code.splitlines())} lines), skipping")
+            skipped["too_short"] += 1
+            continue
+
+        if not _is_valid_python(code):
+            print(f"    [{identity}] idx {idx}: invalid Python syntax, skipping")
+            skipped["invalid_python"] += 1
+            continue
+
+        content_hash = _content_hash(code)
+        if content_hash in seen_hashes:
+            print(f"    [{identity}] idx {idx}: duplicate content, skipping")
+            skipped["duplicate"] += 1
+            continue
+
+        # Save sample
+        out_file = output_dir / f"ai_{identity}_{idx}.py"
+        out_file.write_text(code)
+
+        # Save sidecar metadata
+        sidecar = {
+            "identity": identity,
+            "model": model_name,
+            "prompt_index": idx,
+            "prompt": prompt,
+            "collected_at": int(time.time()),
+            "content_hash": content_hash,
+            "total_lines": len(code.splitlines()),
+            "code_lines": _count_code_lines(code),
+        }
+        (output_dir / f"ai_{identity}_{idx}.py.json").write_text(json.dumps(sidecar, indent=2))
+
+        seen_hashes.add(content_hash)
+        collected += 1
+        print(
+            f"    [{identity}] {current_count + collected}/{target}: "
+            f"{len(code.splitlines())} lines — {prompt[:55]}..."
+        )
+
+        time.sleep(0.5)
+
+    # Summary for this identity
+    skip_parts = [f"{v} {k}" for k, v in skipped.items() if v]
+    skip_str = f" (skipped: {', '.join(skip_parts)})" if skip_parts else ""
+    print(f"  {identity}: +{collected} new samples{skip_str}  [total on disk: {current_count + collected}]")
+    return collected
 
 
-# --- Main Execution ---
+# --- Main ---
 
 def main():
     base = Path(__file__).parent
     output_dir = base / "research/data/raw"
     output_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Get API keys
-    openai_key = os.environ.get("OPENAI_API_KEY")
+
+    openai_key    = os.environ.get("OPENAI_API_KEY")
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
-    gemini_key = os.environ.get("GEMINI_API_KEY")
-    opencode_key = os.environ.get("OPENCODE_API_KEY")
-    
+    gemini_key    = os.environ.get("GEMINI_API_KEY")
+    deepseek_key  = os.environ.get("DEEPSEEK_API_KEY")
+    opencode_key  = os.environ.get("OPENCODE_API_KEY")
+
     print("=" * 60)
     print("AI Sample Collection from Real LLM APIs")
     print("=" * 60)
-    print(f"OpenAI API: {'OK' if openai_key else 'NOT SET'}")
+    print(f"OpenAI API:    {'OK' if openai_key else 'NOT SET'}")
     print(f"Anthropic API: {'OK' if anthropic_key else 'NOT SET'}")
-    print(f"Gemini API: {'OK' if gemini_key else 'NOT SET'}")
-    print(f"OpenCode API: {'OK' if opencode_key else 'NOT SET'}")
+    print(f"Gemini API:    {'OK' if gemini_key else 'NOT SET'}")
+    print(f"DeepSeek API:  {'OK' if deepseek_key else 'NOT SET'}")
+    print(f"OpenCode API:  {'OK' if opencode_key else 'NOT SET'} (Kimi via Zen)")
     print()
-    
-    # Fetch real samples
-    samples = {}
-    
-    print("Fetching GPT-4o samples...")
-    samples["gpt4o"] = fetch_openai_samples(openai_key, "gpt-4o", 15)
-    print(f"  Total: {len(samples['gpt4o'])} samples\n")
-    
-    print("Fetching Claude samples...")
-    samples["claude"] = fetch_anthropic_samples(anthropic_key, "claude-sonnet-4-6", 15)
-    print(f"  Total: {len(samples['claude'])} samples\n")
-    
-    print("Fetching Gemini samples...")
-    samples["gemini"] = fetch_gemini_samples(gemini_key, "gemini-2.5-flash", 15)
-    print(f"  Total: {len(samples['gemini'])} samples\n")
-    
-    print("Fetching DeepSeek V3 samples (SKIPPED - API unavailable)...")
-    # Note: DeepSeek API not accessible with current OPENCODE_API_KEY
-    # Would need proper DeepSeek API key to use https://api.deepseek.com
-    samples["deepseek_v3"] = []
-    print(f"  Total: {len(samples['deepseek_v3'])} samples\n")
-    
-    # Save all samples
-    print("=" * 60)
-    print("Saving samples...")
-    print("=" * 60)
-    for model_name, model_samples in samples.items():
-        for i, code in enumerate(model_samples):
-            filename = f"ai_{model_name}_{i}.py"
-            filepath = output_dir / filename
-            with open(filepath, "w") as f:
-                f.write(code)
-        print(f"  {model_name}: {len(model_samples)} samples saved")
-    
+
+    # Load hashes of all existing AI samples for cross-identity deduplication
+    seen_hashes: set[str] = set()
+    for f in output_dir.glob("ai_*.py"):
+        try:
+            seen_hashes.add(_content_hash(f.read_text()))
+        except Exception:
+            pass
+    if seen_hashes:
+        print(f"Loaded {len(seen_hashes)} existing content hashes for deduplication.\n")
+
+    # (identity, model_name, fetch_fn)
+    model_configs = [
+        ("gpt4o",       "gpt-4o",              _make_openai_fetcher(openai_key, "gpt-4o")),
+        ("claude",      "claude-sonnet-4-6",    _make_anthropic_fetcher(anthropic_key, "claude-sonnet-4-6")),
+        ("gemini",      "gemini-2.5-flash",     _make_gemini_fetcher(gemini_key, "gemini-2.5-flash")),
+        ("deepseek_v3", "deepseek-chat",        _make_deepseek_fetcher(deepseek_key, "deepseek-chat")),
+        ("kimi",        "kimi-k2",              _make_kimi_fetcher(opencode_key, "kimi-k2")),
+    ]
+
+    total_new = 0
+    for identity, model_name, fetch_fn in model_configs:
+        print(f"\nProcessing {identity} ({model_name})...")
+        if fetch_fn is None:
+            print(f"  Skipping {identity}: API key not set or SDK unavailable.")
+            continue
+        total_new += collect_for_identity(identity, model_name, fetch_fn, output_dir, seen_hashes)
+
     print("\n" + "=" * 60)
     print("Collection Complete!")
     print("=" * 60)
-    total = sum(len(s) for s in samples.values())
-    print(f"Total real AI samples collected: {total}")
-    for model_name, model_samples in samples.items():
-        print(f"  {model_name:15s}: {len(model_samples):3d} samples")
+    print(f"Newly collected this run: {total_new}")
+    for identity, _, _ in model_configs:
+        count = len(list(output_dir.glob(f"ai_{identity}_*.py")))
+        print(f"  {identity:15s}: {count:3d} / {TARGET_PER_MODEL}")
 
 
 if __name__ == "__main__":
