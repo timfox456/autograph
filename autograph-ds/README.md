@@ -20,6 +20,7 @@ The attestation engine utilizes a multi-layered approach. Detailed information c
 - `src/engine.py`: The `AttestationEngine` that orchestrates extraction and scoring.
 - `research/data/`: Raw and processed datasets used for training.
 - `research/models/`: Serialized model files.
+ - `generate_ai_samples.py`: Collector that fetches real AI code samples (see docs/ai_collection.md).
 
 ## Getting Started
 
@@ -94,6 +95,21 @@ python process_dataset.py
 # Then train the models
 python train_models.py
 ```
+
+### Collecting AI Samples
+
+To fetch real AI-generated Python samples for the dataset, configure provider API keys in `.env` and run:
+
+```bash
+python generate_ai_samples.py
+```
+
+Optional controls:
+- `AI_DRY_RUN=1` to validate without writing files
+- `AI_TARGET_PER_MODEL=10` to change per-provider target
+- `AI_PROVIDERS=openai,anthropic` to restrict providers
+
+See `docs/ai_collection.md` for sidecar schema, rate-limit logging, and more.
 
 ### Running Tests
 

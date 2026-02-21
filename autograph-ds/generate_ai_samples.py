@@ -25,6 +25,7 @@ import json
 import os
 import time
 from pathlib import Path
+from typing import Optional
 
 import requests
 
@@ -90,6 +91,10 @@ PROMPTS = [
 
 # --- Utility Functions ---
 
+class RateLimitError(Exception):
+    """Raised when a provider signals a rate limit condition (HTTP 429, etc)."""
+
+
 def _content_hash(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
 
@@ -132,12 +137,18 @@ def _make_openai_fetcher(api_key, model):
     client = OpenAI(api_key=api_key)
 
     def fetch(prompt):
-        r = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": f"{prompt} Output ONLY the Python code, no explanation."}],
-            temperature=0.7,
-        )
-        return r.choices[0].message.content
+        try:
+            r = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": f"{prompt} Output ONLY the Python code, no explanation."}],
+                temperature=0.7,
+            )
+            return r.choices[0].message.content
+        except Exception as e:  # Defer precise typing to avoid hard dep
+            # Detect OpenAI rate limit patterns without importing error types
+            if "rate limit" in str(e).lower() or "429" in str(e):
+                raise RateLimitError(str(e))
+            raise
 
     return fetch
 
@@ -148,12 +159,17 @@ def _make_anthropic_fetcher(api_key, model):
     client = anthropic.Anthropic(api_key=api_key)
 
     def fetch(prompt):
-        r = client.messages.create(
-            model=model,
-            max_tokens=2048,
-            messages=[{"role": "user", "content": f"{prompt} Output ONLY the Python code, no explanation."}],
-        )
-        return r.content[0].text
+        try:
+            r = client.messages.create(
+                model=model,
+                max_tokens=2048,
+                messages=[{"role": "user", "content": f"{prompt} Output ONLY the Python code, no explanation."}],
+            )
+            return r.content[0].text
+        except Exception as e:
+            if "rate limit" in str(e).lower() or "429" in str(e):
+                raise RateLimitError(str(e))
+            raise
 
     return fetch
 
@@ -171,12 +187,18 @@ def _make_gemini_fetcher(api_key, model):
     )
 
     def fetch(prompt):
-        r = client.models.generate_content(
-            model=model,
-            contents=f"{prompt} Output ONLY the Python code, no explanation.",
-            config=config,
-        )
-        return r.text
+        try:
+            r = client.models.generate_content(
+                model=model,
+                contents=f"{prompt} Output ONLY the Python code, no explanation.",
+                config=config,
+            )
+            return r.text
+        except Exception as e:
+            # google.genai exceptions are not well-documented yet; pattern match
+            if ("rate" in str(e).lower() and "limit" in str(e).lower()) or "429" in str(e):
+                raise RateLimitError(str(e))
+            raise
 
     return fetch
 
@@ -196,6 +218,8 @@ def _make_deepseek_fetcher(api_key, model):
             },
             timeout=60,
         )
+        if r.status_code == 429:
+            raise RateLimitError(f"HTTP 429: {r.text}")
         r.raise_for_status()
         return r.json()["choices"][0]["message"]["content"]
 
@@ -209,20 +233,34 @@ def _make_kimi_fetcher(api_key, model):
     client = OpenAI(api_key=api_key, base_url="https://opencode.ai/zen/v1/")
 
     def fetch(prompt):
-        r = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": f"{prompt} Output ONLY the Python code, no explanation."}],
-            max_tokens=2048,
-            temperature=0.7,
-        )
-        return r.choices[0].message.content
+        try:
+            r = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": f"{prompt} Output ONLY the Python code, no explanation."}],
+                max_tokens=2048,
+                temperature=0.7,
+            )
+            return r.choices[0].message.content
+        except Exception as e:
+            if "rate limit" in str(e).lower() or "429" in str(e):
+                raise RateLimitError(str(e))
+            raise
 
     return fetch
 
 
 # --- Core Collection Loop ---
 
-def collect_for_identity(identity, model_name, fetch_fn, output_dir, seen_hashes, target=TARGET_PER_MODEL):
+def collect_for_identity(
+    identity: str,
+    model_name: str,
+    fetch_fn,
+    output_dir: Path,
+    seen_hashes: set[str],
+    target: int = TARGET_PER_MODEL,
+    dry_run: bool = False,
+    summary_sink: Optional[dict] = None,
+):
     """
     Collect AI code samples for one model identity.
 
@@ -249,7 +287,8 @@ def collect_for_identity(identity, model_name, fetch_fn, output_dir, seen_hashes
     print(f"  {identity}: have {current_count}/{target}, collecting {needed} more...")
 
     collected = 0
-    skipped = {"too_short": 0, "invalid_python": 0, "duplicate": 0, "error": 0}
+    planned = 0  # for dry-run
+    skipped = {"too_short": 0, "invalid_python": 0, "duplicate": 0, "error": 0, "rate_limited": 0}
 
     for idx in range(target):
         if collected >= needed:
@@ -261,6 +300,11 @@ def collect_for_identity(identity, model_name, fetch_fn, output_dir, seen_hashes
 
         try:
             raw = fetch_fn(prompt)
+        except RateLimitError as e:
+            print(f"    [{identity}] idx {idx}: RATE-LIMIT — {e}")
+            skipped["rate_limited"] += 1
+            time.sleep(2)
+            continue
         except Exception as e:
             print(f"    [{identity}] idx {idx}: API error — {e}")
             skipped["error"] += 1
@@ -285,11 +329,8 @@ def collect_for_identity(identity, model_name, fetch_fn, output_dir, seen_hashes
             skipped["duplicate"] += 1
             continue
 
-        # Save sample
+        # Save sample unless dry-run
         out_file = output_dir / f"ai_{identity}_{idx}.py"
-        out_file.write_text(code)
-
-        # Save sidecar metadata
         sidecar = {
             "identity": identity,
             "model": model_name,
@@ -300,25 +341,84 @@ def collect_for_identity(identity, model_name, fetch_fn, output_dir, seen_hashes
             "total_lines": len(code.splitlines()),
             "code_lines": _count_code_lines(code),
         }
-        (output_dir / f"ai_{identity}_{idx}.py.json").write_text(json.dumps(sidecar, indent=2))
 
-        seen_hashes.add(content_hash)
-        collected += 1
-        print(
-            f"    [{identity}] {current_count + collected}/{target}: "
-            f"{len(code.splitlines())} lines — {prompt[:55]}..."
-        )
+        if dry_run:
+            planned += 1
+            print(
+                f"    [{identity}] DRY-RUN would write {out_file.name} "
+                f"({len(code.splitlines())} lines)"
+            )
+        else:
+            out_file.write_text(code)
+            (output_dir / f"ai_{identity}_{idx}.py.json").write_text(json.dumps(sidecar, indent=2))
+            seen_hashes.add(content_hash)
+            collected += 1
+            print(
+                f"    [{identity}] {current_count + collected}/{target}: "
+                f"{len(code.splitlines())} lines — {prompt[:55]}..."
+            )
 
-        time.sleep(0.5)
+            time.sleep(0.5)
 
     # Summary for this identity
     skip_parts = [f"{v} {k}" for k, v in skipped.items() if v]
     skip_str = f" (skipped: {', '.join(skip_parts)})" if skip_parts else ""
-    print(f"  {identity}: +{collected} new samples{skip_str}  [total on disk: {current_count + collected}]")
-    return collected
+    if dry_run:
+        print(f"  {identity}: DRY-RUN +{planned} planned{skip_str}  [total on disk unchanged: {current_count}]")
+    else:
+        print(f"  {identity}: +{collected} new samples{skip_str}  [total on disk: {current_count + collected}]")
+
+    # Emit per-identity summary to sink
+    summary = {
+        "identity": identity,
+        "model": model_name,
+        "existing": current_count,
+        "target": target,
+        "collected": collected,
+        "planned": planned,
+        "skipped": skipped,
+        "final_on_disk": current_count if dry_run else current_count + collected,
+    }
+    if summary_sink is not None:
+        summary_sink[identity] = summary
+
+    return collected if not dry_run else 0
 
 
 # --- Main ---
+
+def _parse_enabled_providers() -> Optional[set[str]]:
+    """Parse AI_PROVIDERS env var into a normalized set of identities.
+
+    Accepts comma-separated values. Supported tokens (case-insensitive):
+      - openai, gpt4o -> gpt4o
+      - anthropic, claude -> claude
+      - gemini -> gemini
+      - deepseek, deepseek_v3 -> deepseek_v3
+      - kimi, opencode -> kimi
+    Returns None if not set (meaning: do not filter by provider list).
+    """
+    raw = os.environ.get("AI_PROVIDERS")
+    if not raw:
+        return None
+    mapping = {
+        "openai": "gpt4o",
+        "gpt4o": "gpt4o",
+        "anthropic": "claude",
+        "claude": "claude",
+        "gemini": "gemini",
+        "deepseek": "deepseek_v3",
+        "deepseek_v3": "deepseek_v3",
+        "kimi": "kimi",
+        "opencode": "kimi",
+    }
+    enabled = set()
+    for tok in raw.split(','):
+        key = tok.strip().lower()
+        if key in mapping:
+            enabled.add(mapping[key])
+    return enabled
+
 
 def main():
     base = Path(__file__).parent
@@ -331,6 +431,15 @@ def main():
     deepseek_key  = os.environ.get("DEEPSEEK_API_KEY")
     opencode_key  = os.environ.get("OPENCODE_API_KEY")
 
+    dry_run = os.environ.get("AI_DRY_RUN", "0") in {"1", "true", "yes", "on"}
+    target_override = os.environ.get("AI_TARGET_PER_MODEL")
+    try:
+        target_per_model = int(target_override) if target_override else TARGET_PER_MODEL
+    except ValueError:
+        target_per_model = TARGET_PER_MODEL
+
+    enabled_set = _parse_enabled_providers()
+
     print("=" * 60)
     print("AI Sample Collection from Real LLM APIs")
     print("=" * 60)
@@ -339,6 +448,10 @@ def main():
     print(f"Gemini API:    {'OK' if gemini_key else 'NOT SET'}")
     print(f"DeepSeek API:  {'OK' if deepseek_key else 'NOT SET'}")
     print(f"OpenCode API:  {'OK' if opencode_key else 'NOT SET'} (Kimi via Zen)")
+    print(f"Dry-run:        {'ON' if dry_run else 'OFF'}")
+    print(f"Target/model:   {target_per_model}")
+    if enabled_set is not None:
+        print(f"Providers:      only {', '.join(sorted(enabled_set))}")
     print()
 
     # Load hashes of all existing AI samples for cross-identity deduplication
@@ -360,21 +473,55 @@ def main():
         ("kimi",        "kimi-k2",              _make_kimi_fetcher(opencode_key, "kimi-k2")),
     ]
 
+    # Filter by AI_PROVIDERS env var if provided
+    if enabled_set is not None:
+        model_configs = [cfg for cfg in model_configs if cfg[0] in enabled_set]
+
     total_new = 0
+    per_identity_summary: dict[str, dict] = {}
     for identity, model_name, fetch_fn in model_configs:
         print(f"\nProcessing {identity} ({model_name})...")
         if fetch_fn is None:
             print(f"  Skipping {identity}: API key not set or SDK unavailable.")
             continue
-        total_new += collect_for_identity(identity, model_name, fetch_fn, output_dir, seen_hashes)
+        total_new += collect_for_identity(
+            identity,
+            model_name,
+            fetch_fn,
+            output_dir,
+            seen_hashes,
+            target=target_per_model,
+            dry_run=dry_run,
+            summary_sink=per_identity_summary,
+        )
 
     print("\n" + "=" * 60)
     print("Collection Complete!")
     print("=" * 60)
     print(f"Newly collected this run: {total_new}")
+    print("\nSummary by provider:")
+    overall = {"collected": 0, "planned": 0, "skipped": {"too_short": 0, "invalid_python": 0, "duplicate": 0, "error": 0, "rate_limited": 0}}
     for identity, _, _ in model_configs:
         count = len(list(output_dir.glob(f"ai_{identity}_*.py")))
-        print(f"  {identity:15s}: {count:3d} / {TARGET_PER_MODEL}")
+        summ = per_identity_summary.get(identity, {})
+        collected = summ.get("collected", 0)
+        planned = summ.get("planned", 0)
+        skipped = summ.get("skipped", {})
+        overall["collected"] += collected
+        overall["planned"] += planned
+        for k in overall["skipped"].keys():
+            overall["skipped"][k] += int(skipped.get(k, 0))
+        target = summ.get("target", TARGET_PER_MODEL)
+        print(
+            f"  {identity:15s}: on disk {count:3d} / {target}  | "
+            f"collected +{collected}  planned +{planned}  "
+            f"skipped {skipped}"
+        )
+    print("\nOverall:")
+    print(
+        f"  collected +{overall['collected']}  planned +{overall['planned']}  "
+        f"skipped {overall['skipped']}"
+    )
 
 
 if __name__ == "__main__":
