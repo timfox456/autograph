@@ -10,6 +10,7 @@ Download URL: https://www.reflection.uniovi.es/bigcode/download/2024/CLAVE/
 import os
 import sys
 import json
+import math
 import torch
 import numpy as np
 import requests
@@ -46,14 +47,19 @@ class CLAVEEmbedder:
             device: torch device (auto-detected if None)
             cache_dir: Directory to cache CLAVE model files
         """
-        self.device = device or get_device()
+        # CLAVE uses aten::_nested_tensor_from_mask which is not implemented on MPS.
+        # Force CPU regardless of the requested device.
+        if device is not None and device.type != "cpu":
+            logger.info(f"CLAVE: overriding device {device} → cpu (MPS/CUDA not supported)")
+        self.device = torch.device("cpu")
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
         self.model = None
         self.tokenizer = None
         self.max_length = 512
-        self.embedding_dim = 768
+        # Default; will be inferred after model load
+        self.embedding_dim = 512
         
         # Try to load CLAVE
         self._available = self._try_load()
@@ -108,13 +114,27 @@ class CLAVEEmbedder:
             if not self._download_file(CLAVE_URLS["tokenizer"], tokenizer_zip, "CLAVE tokenizer"):
                 return False
         
-        # Extract model
-        model_dir = self.cache_dir / "model"
-        if not model_dir.exists():
+        # Extract model — the archive contains CLAVE.pt directly (no model/ subdir)
+        model_pt_candidates = [
+            self.cache_dir / "model" / "CLAVE.pt",
+            self.cache_dir / "CLAVE.pt",
+        ]
+        already_extracted = any(p.exists() and p.stat().st_size > 0 for p in model_pt_candidates)
+        if not already_extracted:
             try:
                 logger.info("Extracting CLAVE model...")
-                with rarfile.RarFile(model_rar) as rf:
-                    rf.extractall(path=self.cache_dir)
+                try:
+                    with rarfile.RarFile(model_rar) as rf:
+                        rf.extractall(path=self.cache_dir)
+                except Exception as rar_e:
+                    logger.warning(f"rarfile extraction failed ({rar_e}), trying bsdtar...")
+                    import subprocess
+                    result = subprocess.run(
+                        ["bsdtar", "xf", str(model_rar), "-C", str(self.cache_dir)],
+                        capture_output=True, text=True,
+                    )
+                    if result.returncode != 0:
+                        raise RuntimeError(f"bsdtar failed: {result.stderr}")
                 logger.info("Extracted CLAVE model")
             except Exception as e:
                 logger.error(f"Failed to extract CLAVE model: {e}")
@@ -146,10 +166,22 @@ class CLAVEEmbedder:
                 logger.warning("CLAVE setup failed. Model will not be available.")
                 return False
             
-            # Add CLAVE repo to path if available
+            # Add extracted directories to sys.path for module discovery
+            sys.path.insert(0, str(self.cache_dir))
+            extracted_model_dir = self.cache_dir / "model"
+            extracted_tokenizer_dir = self.cache_dir / "tokenizer_data"
+            if extracted_model_dir.exists():
+                sys.path.insert(0, str(extracted_model_dir))
+            if extracted_tokenizer_dir.exists():
+                sys.path.insert(0, str(extracted_tokenizer_dir))
+            # Also support a vendored CLAVE repo if present in the project
             clave_repo = Path(__file__).parent.parent.parent / "CLAVE"
             if clave_repo.exists():
                 sys.path.insert(0, str(clave_repo))
+                # modules live in src/ subdirectory of the CLAVE repo
+                clave_src = clave_repo / "src"
+                if clave_src.exists():
+                    sys.path.insert(0, str(clave_src))
             
             # Try to import CLAVE modules
             try:
@@ -162,29 +194,37 @@ class CLAVEEmbedder:
             # Load tokenizer
             self.tokenizer = SpTokenizer()
             
-            # Load model
+            # Load model — architecture from eval.py in CLAVE repo
             self.model = FineTunedModel(
-                self.tokenizer.vocab_size,
+                ntoken=self.tokenizer.get_vocab_size(),
                 d_model=512,
-                d_ff=2048,
-                heads=8,
+                d_out=512,
+                nhead=8,
+                d_hid=2048,
+                nlayers=6,
                 dropout=0.1,
-                enc_layers=6,
-                use_layer_norm=True
+                use_layer_norm=True,
             )
-            
+
             # Load weights
             model_path = self.cache_dir / "model" / "CLAVE.pt"
             if not model_path.exists():
-                # Try alternative locations
+                # Archive extracts CLAVE.pt directly to cache root (no model/ subdir)
                 model_path = self.cache_dir / "CLAVE.pt"
-            
+
             if model_path.exists():
-                checkpoint = torch.load(model_path, map_location=self.device)
-                self.model.load_state_dict(checkpoint)
+                checkpoint = torch.load(model_path, map_location=self.device, weights_only=True)
+                state_dict = checkpoint["model_state_dict"]
+                # Strip _orig_mod. prefix added by torch.compile
+                state_dict = {
+                    (k[10:] if k.startswith("_orig_mod.") else k): v
+                    for k, v in state_dict.items()
+                }
+                self.model.load_state_dict(state_dict)
                 self.model.to(self.device)
                 self.model.eval()
-                logger.info(f"Loaded CLAVE model on {self.device}")
+                self.embedding_dim = 512
+                logger.info(f"Loaded CLAVE model on {self.device} (dim={self.embedding_dim})")
                 return True
             else:
                 logger.warning(f"CLAVE model weights not found at {model_path}")
@@ -233,20 +273,17 @@ class CLAVEEmbedder:
             return None
         
         try:
-            # Tokenize
-            tokens = self.tokenizer.encode(code)
+            # Tokenize — SpTokenizer.tokenizes() encodes a string to token ids
+            tokens = self.tokenizer.tokenizes(code)
             tokens = self._truncate_head_tail(tokens)
-            
+
             # Convert to tensor
             input_tensor = torch.tensor([tokens]).to(self.device)
-            
-            # Get embeddings
+
+            # Get embeddings via forward pass (avg_pool → layer_norm → linear → ReLU)
             with torch.no_grad():
-                # CLAVE uses mean pooling over encoder outputs
-                encoder_output = self.model.encode(input_tensor)
-                # Mean pooling over sequence dimension
-                embedding = encoder_output.mean(dim=1)
-            
+                embedding = self.model(input_tensor)
+
             return embedding.cpu().numpy().flatten()
         
         except Exception as e:
@@ -272,8 +309,8 @@ class CLAVEEmbedder:
         
         iterator = range(0, len(codes), batch_size)
         if show_progress:
-            iterator = tqdm(iterator, desc="Embedding with CLAVE", 
-                          total=len(codes) // batch_size + 1)
+            total_batches = math.ceil(len(codes) / max(1, batch_size))
+            iterator = tqdm(iterator, desc="Embedding with CLAVE", total=total_batches)
         
         for i in iterator:
             batch = codes[i:i + batch_size]
@@ -285,7 +322,7 @@ class CLAVEEmbedder:
                     batch_embeddings.append(embedding)
                 else:
                     # Return zeros if embedding failed
-                    batch_embeddings.append(np.zeros(self.embedding_dim))
+                    batch_embeddings.append(np.zeros(self.embedding_dim, dtype=np.float32))
             
             embeddings.append(np.vstack(batch_embeddings))
         

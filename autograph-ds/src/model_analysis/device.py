@@ -20,7 +20,7 @@ def get_device(smoke_test: bool = True) -> torch.device:
         torch.device: Best available device
     """
     # Priority 1: MPS (Apple Silicon)
-    if torch.backends.mps.is_available():
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
         device = torch.device("mps")
         if smoke_test:
             try:
@@ -30,7 +30,12 @@ def get_device(smoke_test: bool = True) -> torch.device:
                 logger.info(f"MPS smoke test passed. Using device: {device}")
                 return device
             except Exception as e:
-                logger.warning(f"MPS smoke test failed: {e}. Falling back to CPU.")
+                logger.warning(f"MPS smoke test failed: {e}. Checking CUDA then falling back.")
+                # If MPS fails, try CUDA next before CPU
+                if torch.cuda.is_available():
+                    cuda_device = torch.device("cuda")
+                    logger.info(f"Using CUDA device: {cuda_device}")
+                    return cuda_device
                 return torch.device("cpu")
         else:
             logger.info(f"Using MPS device: {device}")

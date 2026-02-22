@@ -8,6 +8,7 @@ import torch
 import numpy as np
 from typing import List, Optional
 from transformers import AutoModel, AutoTokenizer
+import math
 import logging
 from tqdm import tqdm
 
@@ -141,8 +142,8 @@ class HuggingFaceEmbedder:
         
         iterator = range(0, len(codes), batch_size)
         if show_progress:
-            iterator = tqdm(iterator, desc=f"Embedding with {self.model_name}", 
-                          total=len(codes) // batch_size + 1)
+            total_batches = math.ceil(len(codes) / max(1, batch_size))
+            iterator = tqdm(iterator, desc=f"Embedding with {self.model_name}", total=total_batches)
         
         for i in iterator:
             batch = codes[i:i + batch_size]
@@ -159,8 +160,12 @@ class HuggingFaceEmbedder:
             padded_tokens = []
             attention_masks = []
             
+            pad_id = self.tokenizer.pad_token_id
+            if pad_id is None:
+                # Fallback to eos or 0 if pad is undefined
+                pad_id = getattr(self.tokenizer, "eos_token_id", 0) or 0
             for tokens in batch_embeddings:
-                padding = [self.tokenizer.pad_token_id] * (max_len - len(tokens))
+                padding = [pad_id] * (max_len - len(tokens))
                 padded_tokens.append(tokens + padding)
                 attention_masks.append([1] * len(tokens) + [0] * len(padding))
             

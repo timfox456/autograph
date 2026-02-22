@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 # Configuration
 RAW_DATA_DIR = Path("research/data/raw")
 EMBEDDING_CACHE_DIR = Path("research/model_analysis/data/embeddings")
-MIN_TOKEN_COUNT = 50  # Skip files with fewer than 50 tokens
+MIN_CHAR_COUNT = 50  # Skip files with fewer than 50 characters
 
 
 def load_raw_samples() -> Tuple[List[str], List[str], List[str]]:
@@ -67,8 +67,8 @@ def load_raw_samples() -> Tuple[List[str], List[str], List[str]]:
             with open(py_file, 'r', encoding='utf-8') as f:
                 code = f.read()
             
-            # Skip very short files
-            if len(code) < MIN_TOKEN_COUNT:
+            # Skip very short files (by character length)
+            if len(code) < MIN_CHAR_COUNT:
                 logger.debug(f"Skipping {py_file.name}: too short ({len(code)} chars)")
                 continue
             
