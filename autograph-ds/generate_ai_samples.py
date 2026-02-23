@@ -191,16 +191,21 @@ class RateLimitError(Exception):
     """Raised when a provider signals a rate limit condition (HTTP 429, etc)."""
 
 
+class TruncationError(Exception):
+    """Raised when a provider returns a truncated response (stop_reason=max_tokens/length)."""
+
+
 def _content_hash(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
 
 
-def _is_valid_python(code: str) -> bool:
+def _python_syntax_error(code: str) -> "Optional[SyntaxError]":
+    """Returns None if the code is valid Python, or the SyntaxError if not."""
     try:
         compile(code, "<string>", "exec")
-        return True
-    except SyntaxError:
-        return False
+        return None
+    except SyntaxError as e:
+        return e
 
 
 def _count_code_lines(code: str) -> int:
@@ -258,10 +263,16 @@ def _make_anthropic_fetcher(api_key, model):
         try:
             r = client.messages.create(
                 model=model,
-                max_tokens=2048,
+                max_tokens=8192,
                 messages=[{"role": "user", "content": f"{prompt} Output ONLY the Python code, no explanation."}],
             )
+            if r.stop_reason == "max_tokens":
+                raise TruncationError(
+                    f"Response truncated at {len(r.content[0].text)} chars (stop_reason=max_tokens)"
+                )
             return r.content[0].text
+        except (RateLimitError, TruncationError):
+            raise
         except Exception as e:
             if "rate limit" in str(e).lower() or "429" in str(e):
                 raise RateLimitError(str(e))
@@ -333,10 +344,17 @@ def _make_kimi_fetcher(api_key, model):
             r = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": f"{prompt} Output ONLY the Python code, no explanation."}],
-                max_tokens=2048,
+                max_tokens=8192,
                 temperature=0.7,
             )
-            return r.choices[0].message.content
+            choice = r.choices[0]
+            if choice.finish_reason == "length":
+                raise TruncationError(
+                    f"Response truncated at {len(choice.message.content)} chars (finish_reason=length)"
+                )
+            return choice.message.content
+        except (RateLimitError, TruncationError):
+            raise
         except Exception as e:
             if "rate limit" in str(e).lower() or "429" in str(e):
                 raise RateLimitError(str(e))
@@ -384,7 +402,8 @@ def collect_for_identity(
 
     collected = 0
     planned = 0  # for dry-run
-    skipped = {"too_short": 0, "invalid_python": 0, "duplicate": 0, "error": 0, "rate_limited": 0}
+    skipped = {"too_short": 0, "invalid_python": 0, "truncated": 0, "duplicate": 0, "error": 0, "rate_limited": 0}
+    rejected_dir = output_dir / "rejected"
 
     for idx in range(target):
         if collected >= needed:
@@ -396,6 +415,11 @@ def collect_for_identity(
 
         try:
             raw = fetch_fn(prompt)
+        except TruncationError as e:
+            print(f"    [{identity}] idx {idx}: TRUNCATED — {e}")
+            skipped["truncated"] += 1
+            time.sleep(1)
+            continue
         except RateLimitError as e:
             print(f"    [{identity}] idx {idx}: RATE-LIMIT — {e}")
             skipped["rate_limited"] += 1
@@ -414,9 +438,29 @@ def collect_for_identity(
             skipped["too_short"] += 1
             continue
 
-        if not _is_valid_python(code):
-            print(f"    [{identity}] idx {idx}: invalid Python syntax, skipping")
+        syntax_err = _python_syntax_error(code)
+        if syntax_err is not None:
+            print(
+                f"    [{identity}] idx {idx}: invalid Python — "
+                f"{syntax_err.msg} at line {syntax_err.lineno}"
+            )
             skipped["invalid_python"] += 1
+            if not dry_run:
+                rejected_dir.mkdir(exist_ok=True)
+                rejected_file = rejected_dir / f"ai_{identity}_{idx}.py"
+                rejected_file.write_text(code)
+                (rejected_dir / f"ai_{identity}_{idx}.py.json").write_text(json.dumps({
+                    "identity": identity,
+                    "model": model_name,
+                    "prompt_index": idx,
+                    "prompt": prompt,
+                    "rejected_at": int(time.time()),
+                    "reason": "invalid_python",
+                    "error": str(syntax_err),
+                    "error_msg": syntax_err.msg,
+                    "error_lineno": syntax_err.lineno,
+                    "total_lines": len(code.splitlines()),
+                }, indent=2))
             continue
 
         content_hash = _content_hash(code)
@@ -596,7 +640,7 @@ def main():
     print("=" * 60)
     print(f"Newly collected this run: {total_new}")
     print("\nSummary by provider:")
-    overall = {"collected": 0, "planned": 0, "skipped": {"too_short": 0, "invalid_python": 0, "duplicate": 0, "error": 0, "rate_limited": 0}}
+    overall = {"collected": 0, "planned": 0, "skipped": {"too_short": 0, "invalid_python": 0, "truncated": 0, "duplicate": 0, "error": 0, "rate_limited": 0}}
     for identity, _, _ in model_configs:
         count = len(list(output_dir.glob(f"ai_{identity}_*.py")))
         summ = per_identity_summary.get(identity, {})
