@@ -9,6 +9,15 @@ from .layout import LayoutExtractor
 from .lexical import LexicalComplexityExtractor
 from .syntactic import SyntacticBiasExtractor
 from .flow import LogicFlowExtractor
+from .semantic import SemanticFingerprintExtractor
+from .complexity import CyclomaticComplexityExtractor
+from .strings import StringContentExtractor
+
+
+# New feature extractors for enhanced semantic analysis
+SEMANTIC_EXTRACTOR = SemanticFingerprintExtractor()
+COMPLEXITY_EXTRACTOR = CyclomaticComplexityExtractor()
+STRING_EXTRACTOR = StringContentExtractor()        
 
 class LogicalDNAExtractor:
     def __init__(self):
@@ -48,7 +57,10 @@ class LogicalDNAExtractor:
                 "layout_rhythm",
                 "lexical_complexity",
                 "syntactic_bias",
-                "logic_flow"
+                "logic_flow",
+                "semantic_fingerprint",  # NEW: Import and API call analysis
+                "cyclomatic_complexity",   # NEW: McCabe complexity metrics
+                "string_content"           # NEW: String semantic analysis
             ]
 
         try:
@@ -88,6 +100,15 @@ class LogicalDNAExtractor:
             
         if "logic_flow" in enabled_buckets:
             dna.update(self.flow_extractor.extract(code, root_node))
+        
+        if "semantic_fingerprint" in enabled_buckets:
+            dna.update(SEMANTIC_EXTRACTOR.extract(code, root_node))
+            
+        if "cyclomatic_complexity" in enabled_buckets:
+            dna.update(COMPLEXITY_EXTRACTOR.extract(code, root_node))
+            
+        if "string_content" in enabled_buckets:
+            dna.update(STRING_EXTRACTOR.extract(code, root_node))
         
         return dna
 

@@ -6,6 +6,12 @@ from src.features.extractor import LogicalDNAExtractor
 from src.utils import flatten_dna
 from collections import Counter
 
+# Global caps to prevent dimensionality explosion from dynamic keys
+TOP_TRIGRAMS_K = 150
+TOP_API_CALLS_K = 80          # limit semantic call_freq_* features
+TOP_EXCEPTION_TYPES_K = 20    # limit exception_type_*_count features
+TOP_NODE_TYPES_K = 120        # limit node_* (AST node types)
+
 MIN_LINES = 5  # Skip samples below this threshold — too little signal for feature extraction
 
 
@@ -19,6 +25,9 @@ def main():
     # 1. First pass: Collect trigrams and extract DNA
     all_dnas = []
     global_trigram_counts = Counter()
+    global_call_counts = Counter()
+    global_exception_counts = Counter()
+    global_node_type_counts = Counter()
     skipped = Counter()
 
     files = [f for f in os.listdir(raw_dir) if f.endswith(".py")]
@@ -43,6 +52,36 @@ def main():
             if "top_trigrams" in dna:
                 global_trigram_counts.update(dna["top_trigrams"])
 
+            # Collect high-cardinality semantic keys for global top-K filtering
+            # 1) API calls: keys like 'call_freq_<safe_name>' with float ratios
+            for k, v in dna.items():
+                if isinstance(k, str) and k.startswith("call_freq_") and not k.startswith("call_freq_placeholder_"):
+                    # Accumulate weighted by value; counts are normalized per-file,
+                    # but summing across files yields a reasonable global importance
+                    try:
+                        global_call_counts[k] += float(v)
+                    except Exception:
+                        pass
+
+                # 2) Exception types: keys like 'exception_type_<Name>_count'
+                if isinstance(k, str) and k.startswith("exception_type_") and k.endswith("_count"):
+                    try:
+                        global_exception_counts[k] += int(v)
+                    except Exception:
+                        # Some implementations may store floats; fallback to float accumulation
+                        try:
+                            global_exception_counts[k] += float(v)
+                        except Exception:
+                            pass
+
+            # 3) AST node types live under node_type_counts dict
+            if isinstance(dna.get("node_type_counts"), dict):
+                for node_type, count in dna["node_type_counts"].items():
+                    try:
+                        global_node_type_counts[node_type] += float(count)
+                    except Exception:
+                        pass
+
             dna["_filename"] = filename  # Temp storage
             all_dnas.append(dna)
         except Exception as e:
@@ -53,9 +92,18 @@ def main():
     for identity, count in sorted(skipped.items(), key=lambda x: -x[1]):
         print(f"  {identity}: {count} skipped")
 
-    # 2. Select Top 150 Trigrams (reduced from 500 to prevent overfitting)
-    top_trigrams = [t for t, count in global_trigram_counts.most_common(150)]
-    print(f"Selected Top 150 trigrams out of {len(global_trigram_counts)} unique sequences.")
+    # 2. Select Top-K for trigrams and other dynamic features
+    top_trigrams = [t for t, count in global_trigram_counts.most_common(TOP_TRIGRAMS_K)]
+    print(f"Selected Top {TOP_TRIGRAMS_K} trigrams out of {len(global_trigram_counts)} unique sequences.")
+
+    top_calls = [k for k, _ in global_call_counts.most_common(TOP_API_CALLS_K)]
+    print(f"Selected Top {TOP_API_CALLS_K} API call features out of {len(global_call_counts)} candidates.")
+
+    top_exceptions = [k for k, _ in global_exception_counts.most_common(TOP_EXCEPTION_TYPES_K)]
+    print(f"Selected Top {TOP_EXCEPTION_TYPES_K} exception type features out of {len(global_exception_counts)} candidates.")
+
+    top_node_types = [k for k, _ in global_node_type_counts.most_common(TOP_NODE_TYPES_K)]
+    print(f"Selected Top {TOP_NODE_TYPES_K} AST node types out of {len(global_node_type_counts)} seen.")
     
     # 3. Flatten and filter
     rows = []
@@ -67,7 +115,27 @@ def main():
             raw_trigrams = dna.pop("top_trigrams")
             filtered_trigrams = {t: raw_trigrams.get(t, 0) for t in top_trigrams}
             dna["top_trigrams"] = filtered_trigrams
-            
+
+        # Filter API call features to top-K
+        for k in list(dna.keys()):
+            if isinstance(k, str) and k.startswith("call_freq_"):
+                if k.startswith("call_freq_placeholder_"):
+                    # Always drop placeholder features
+                    dna.pop(k, None)
+                elif k not in top_calls:
+                    dna.pop(k, None)
+
+        # Filter exception type features to top-K
+        for k in list(dna.keys()):
+            if isinstance(k, str) and k.startswith("exception_type_") and k.endswith("_count"):
+                if k not in top_exceptions:
+                    dna.pop(k, None)
+
+        # Filter AST node types to top-K before flattening
+        if isinstance(dna.get("node_type_counts"), dict):
+            node_counts = dna["node_type_counts"]
+            dna["node_type_counts"] = {nt: node_counts.get(nt, 0) for nt in top_node_types}
+
         flat_dna = flatten_dna(dna)
         
         # Labeling
