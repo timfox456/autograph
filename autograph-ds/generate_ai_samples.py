@@ -54,7 +54,7 @@ except ImportError:
 
 # --- Configuration ---
 
-TARGET_PER_MODEL = 15
+TARGET_PER_MODEL = 55  # Increased from 15 to match human author sample distribution (~50-100)
 MIN_LINES = 3        # total lines (splitlines)
 MIN_CODE_LINES = 3   # non-blank, non-comment lines
 
@@ -86,6 +86,102 @@ PROMPTS = [
     "Write a Python class representing a thread-safe counter.",
     "Write a Python function to find all anagrams of a word in a dictionary.",
     "Write a Python decorator that implements retry logic with exponential backoff.",
+    # --- Web Development & APIs ---
+    "Write a Flask route with JWT authentication that validates a user's token and returns protected data.",
+    "Write a FastAPI endpoint that accepts file uploads and saves them with validation.",
+    "Write a Python function that makes async HTTP requests to multiple APIs concurrently and aggregates results.",
+    "Write a Python decorator that implements rate limiting for API endpoints.",
+    "Write a Python function that implements OAuth2 token refresh logic with automatic retry.",
+    "Write a Python class for a simple REST API client with automatic retry and error handling.",
+    "Write a Python function that parses and validates webhook payloads with signature verification.",
+    "Write a Python script that scrapes a webpage using BeautifulSoup and extracts structured data.",
+    "Write a Python function that implements pagination logic for API responses.",
+    "Write a Python class that manages WebSocket connections with automatic reconnection.",
+    # --- Data Processing & Analysis ---
+    "Write a Python function that reads a large CSV file in chunks and performs aggregation.",
+    "Write a Python function that transforms nested JSON data into a flat dictionary structure.",
+    "Write a Python class that implements a simple ETL pipeline with data validation.",
+    "Write a Python function that performs time-series data resampling and interpolation.",
+    "Write a Python function that detects outliers in a dataset using statistical methods.",
+    "Write a Python script that generates a PDF report from data using a templating engine.",
+    "Write a Python function that validates and sanitizes user input for SQL queries (prevent injection).",
+    "Write a Python class that implements a circular buffer for streaming data.",
+    "Write a Python function that performs fuzzy string matching across large datasets.",
+    "Write a Python function that implements a bloom filter for efficient membership testing.",
+    # --- System & Automation ---
+    "Write a Python script that monitors a log file in real-time and alerts on patterns.",
+    "Write a Python function that implements a simple task scheduler with priority queue.",
+    "Write a Python class for a thread-safe message queue with blocking operations.",
+    "Write a Python function that parallelizes CPU-intensive work using multiprocessing.",
+    "Write a Python script that syncs files between directories with conflict resolution.",
+    "Write a Python function that implements circuit breaker pattern for external service calls.",
+    "Write a Python context manager that temporarily modifies environment variables.",
+    "Write a Python function that generates unique IDs with distributed system support.",
+    "Write a Python class that implements a simple key-value store with persistence.",
+    "Write a Python function that handles graceful shutdown with signal handling.",
+    # --- Testing & Quality ---
+    "Write a Python function that generates mock data using the Faker library.",
+    "Write a Python decorator that logs function entry, exit, and execution time.",
+    "Write a Python class that implements a simple test runner with assertion tracking.",
+    "Write a Python function that performs deep equality comparison of nested structures.",
+    "Write a Python fixture for pytest that sets up and tears down a database connection.",
+    "Write a Python function that generates property-based test cases using Hypothesis.",
+    "Write a Python context manager that captures and suppresses specific exceptions for testing.",
+    "Write a Python function that measures code coverage for a given module.",
+    "Write a Python class that implements a mock HTTP server for testing API clients.",
+    "Write a Python function that validates JSON schemas against provided data.",
+    # --- Advanced Algorithms & Data Structures ---
+    "Write a Python class that implements a trie data structure with prefix search.",
+    "Write a Python function that solves the knapsack problem using dynamic programming.",
+    "Write a Python class that implements a graph with BFS and DFS traversal methods.",
+    "Write a Python function that finds the shortest path in a weighted graph using Dijkstra's algorithm.",
+    "Write a Python class that implements an LRU cache with O(1) operations.",
+    "Write a Python function that performs topological sorting of a directed acyclic graph.",
+    "Write a Python class that implements a skip list for efficient searching.",
+    "Write a Python function that implements the A* pathfinding algorithm.",
+    "Write a Python function that solves the traveling salesman problem using simulated annealing.",
+    "Write a Python class that implements a segment tree for range queries.",
+    # --- Error Handling & Edge Cases ---
+    "Write a Python function that handles timeout scenarios with multiple fallback strategies.",
+    "Write a Python class that implements exponential backoff retry with jitter.",
+    "Write a Python function that validates email addresses with comprehensive regex and DNS check.",
+    "Write a Python context manager that handles resource cleanup on exceptions.",
+    "Write a Python function that implements deadlock detection and resolution for locks.",
+    "Write a Python class that implements a saga pattern for distributed transactions.",
+    "Write a Python function that sanitizes HTML to prevent XSS attacks.",
+    "Write a Python function that implements idempotency keys for API operations.",
+    "Write a Python class that manages database transactions with rollback on failure.",
+    "Write a Python function that implements optimistic locking for concurrent updates.",
+    # --- Configuration & CLI ---
+    "Write a Python function that parses command-line arguments using argparse with subcommands.",
+    "Write a Python class that loads and validates configuration from YAML files with environment overrides.",
+    "Write a Python script that implements a simple CLI progress bar with ETA calculation.",
+    "Write a Python function that implements feature flags with gradual rollout logic.",
+    "Write a Python class that manages application secrets with environment-based encryption.",
+    # --- Database & ORM ---
+    "Write a Python class that implements an in-memory SQLite database manager with connection pooling.",
+    "Write a Python function that performs database migrations with schema versioning.",
+    "Write a Python class that implements a simple ORM with CRUD operations.",
+    "Write a Python function that implements connection pooling for database connections.",
+    "Write a Python script that performs database backup and restoration.",
+    # --- Caching & Performance ---
+    "Write a Python class that implements a TTL cache with automatic expiration.",
+    "Write a Python function that implements memoization with cache size limits.",
+    "Write a Python class that implements a simple load balancer with round-robin strategy.",
+    "Write a Python function that performs batch processing with configurable chunk sizes.",
+    "Write a Python class that implements a throttling mechanism for rate-limited operations.",
+    # --- Security & Cryptography ---
+    "Write a Python function that implements password hashing with salt using bcrypt.",
+    "Write a Python function that generates cryptographically secure random tokens.",
+    "Write a Python class that implements a simple HMAC signature verifier.",
+    "Write a Python function that performs file encryption and decryption using Fernet.",
+    "Write a Python class that implements role-based access control (RBAC).",
+    # --- Serialization & Protocols ---
+    "Write a Python function that serializes Python objects to JSON with datetime handling.",
+    "Write a Python class that implements a simple message protocol with length-prefix framing.",
+    "Write a Python function that parses and generates CSV files with custom delimiters.",
+    "Write a Python class that implements a simple binary protocol parser.",
+    "Write a Python function that performs base64 encoding and decoding with URL-safe alphabet.",
 ]
 
 
