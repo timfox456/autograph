@@ -98,6 +98,93 @@ def test_consistency_checker_unknown_identity(mock_data_path, temp_dir):
     assert pred is None
     assert score is None
 
+def test_isolation_forest_anomaly_is_trained(mock_data_path, temp_dir):
+    """Test that IsolationForestAnomaly.is_trained() works correctly."""
+    from src.models.anomaly import IsolationForestAnomaly
+
+    consistency = IsolationForestAnomaly()
+    assert consistency.is_trained() is False
+
+    # Train the model
+    df = pd.read_csv(mock_data_path)
+    X = df.drop(columns=['label', 'identity', 'filename'])
+    identities = df['identity']
+    consistency.train(X, X.columns.tolist(), identities)
+
+    assert consistency.is_trained() is True
+    assert 'auth1' in consistency.models
+    assert 'auth2' in consistency.models
+
+def test_isolation_forest_anomaly_save_load_is_trained(mock_data_path, temp_dir):
+    """Test that IsolationForestAnomaly maintains is_trained state after save/load."""
+    from src.models.anomaly import IsolationForestAnomaly
+
+    consistency = IsolationForestAnomaly()
+    df = pd.read_csv(mock_data_path)
+    X = df.drop(columns=['label', 'identity', 'filename'])
+    identities = df['identity']
+    consistency.train(X, X.columns.tolist(), identities)
+
+    # Save and load
+    save_dir = os.path.join(temp_dir, "consistency_test")
+    consistency.save(save_dir)
+
+    loaded = IsolationForestAnomaly()
+    assert loaded.is_trained() is False
+    loaded.load(save_dir)
+    assert loaded.is_trained() is True
+
+def test_random_forest_matcher_evaluate_cv(mock_data_path):
+    """Test that RandomForestMatcher.evaluate_cv() works correctly."""
+    df = pd.read_csv(mock_data_path)
+    X = df.drop(columns=['label', 'identity', 'filename'])
+    y = df['identity']
+
+    matcher = RandomForestMatcher()
+    matcher.train(X, y, X.columns.tolist())
+
+    # Run cross-validation
+    cv_scores = matcher.evaluate_cv(X, y, cv=3)
+
+    # Verify expected keys exist
+    assert 'test_accuracy' in cv_scores
+    assert 'test_precision_macro' in cv_scores
+    assert 'test_recall_macro' in cv_scores
+    assert 'test_f1_macro' in cv_scores
+    assert 'train_accuracy' in cv_scores
+
+    # Verify scores are valid (not NaN)
+    assert all(~np.isnan(cv_scores['test_accuracy']))
+    assert all(~np.isnan(cv_scores['test_f1_macro']))
+
+def test_random_forest_matcher_evaluate_cv_with_more_splits(mock_data_path):
+    """Test evaluate_cv with more CV splits (requires more samples)."""
+    df = pd.read_csv(mock_data_path)
+    X = df.drop(columns=['label', 'identity', 'filename'])
+    y = df['identity']
+
+    matcher = RandomForestMatcher()
+    matcher.train(X, y, X.columns.tolist())
+
+    # Run with 2 splits (we have 10 samples per class)
+    cv_scores = matcher.evaluate_cv(X, y, cv=2)
+
+    # Verify all scores are computed
+    assert len(cv_scores['test_accuracy']) == 2
+    assert len(cv_scores['test_f1_macro']) == 2
+
+def test_isolation_forest_anomaly_contamination_parameter(mock_data_path):
+    """Test that IsolationForestAnomaly uses correct contamination parameter (0.25)."""
+    from src.models.anomaly import IsolationForestAnomaly
+
+    # Test default contamination
+    model = IsolationForestAnomaly()
+    assert model.contamination == 0.25
+
+    # Test custom contamination
+    model_custom = IsolationForestAnomaly(contamination=0.1)
+    assert model_custom.contamination == 0.1
+
 def test_identity_matcher_missing_features(mock_data_path, temp_dir):
     """Test that predict handles missing features correctly by filling with 0."""
     model_path = os.path.join(temp_dir, "matcher.joblib")

@@ -76,3 +76,41 @@ def test_xgboost_anomaly_save_load(tmp_path):
     test_df = pd.DataFrame({'f1': [1], 'f2': [1]})
     pred, score = new_model.score('A', test_df)
     assert pred == 1
+
+def test_xgboost_anomaly_is_trained():
+    """Test that XGBoostAnomaly.is_trained() works correctly."""
+    X = pd.DataFrame({'f1': [1, 1.1, 0.9, 10], 'f2': [1, 0.9, 1.1, 10]})
+    identities = pd.Series(['A', 'A', 'A', 'B'])
+    feature_names = ['f1', 'f2']
+
+    model = XGBoostAnomaly()
+    assert model.is_trained() is False
+
+    model.train(X, feature_names, identities)
+    assert model.is_trained() is True
+
+def test_xgboost_anomaly_is_trained_save_load(tmp_path):
+    """Test that is_trained state is preserved after save/load."""
+    X = pd.DataFrame({'f1': [1, 1.1, 0.9, 10], 'f2': [1, 0.9, 1.1, 10]})
+    identities = pd.Series(['A', 'A', 'A', 'B'])
+    feature_names = ['f1', 'f2']
+
+    model = XGBoostAnomaly()
+    model.train(X, feature_names, identities)
+
+    # Save and load
+    save_dir = str(tmp_path / "anom_models")
+    model.save(save_dir)
+
+    loaded = XGBoostAnomaly()
+    assert loaded.is_trained() is False
+    loaded.load(save_dir)
+    assert loaded.is_trained() is True
+
+def test_xgboost_anomaly_contamination_default():
+    """Test default parameters of XGBoostAnomaly."""
+    model = XGBoostAnomaly()
+    assert model.params['objective'] == 'binary:logistic'
+    assert model.params['eval_metric'] == 'logloss'
+    assert model.params['random_state'] == 42
+

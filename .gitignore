@@ -54,3 +54,10 @@ htmlcov/
 
 # uv
 .uv/
+
+#.env
+.env 
+
+# Sysiphus
+.sisyphus/
+

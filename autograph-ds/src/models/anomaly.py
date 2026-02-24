@@ -7,9 +7,19 @@ from typing import Optional
 from .base import AnomalyModel
 
 class IsolationForestAnomaly(AnomalyModel):
-    def __init__(self, contamination=0.1, random_state=42):
+    def __init__(self, contamination=0.25, random_state=42):
+        """
+        Initialize IsolationForest-based anomaly detector.
+        
+        Args:
+            contamination: Expected proportion of anomalies. Raised from 0.1 to 0.25
+                after AI sample expansion (72 → 265 samples) increased identity diversity,
+                making per-identity distributions broader and requiring a more permissive
+                anomaly threshold to avoid excessive false positives.
+            random_state: Random seed for reproducibility.
+        """
         super().__init__()
-        self.models = {} # identity -> model
+        self.models = {}  # identity -> model
         self.contamination = contamination
         self.random_state = random_state
         self._trained = False
