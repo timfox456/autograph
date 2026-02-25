@@ -7,9 +7,7 @@ architecture different from standard HuggingFace models.
 Download URL: https://www.reflection.uniovi.es/bigcode/download/2024/CLAVE/
 """
 
-import os
 import sys
-import json
 import math
 import torch
 import numpy as np
@@ -21,7 +19,6 @@ from typing import List, Optional
 from tqdm import tqdm
 import logging
 
-from src.model_analysis.device import get_device
 
 logger = logging.getLogger(__name__)
 
@@ -35,14 +32,14 @@ DEFAULT_CACHE_DIR = Path("~/.cache/clave").expanduser()
 
 class CLAVEEmbedder:
     """Embedder for CLAVE model.
-    
+
     Note: CLAVE requires downloading model weights and has a custom
     tokenizer that needs to be loaded separately from HuggingFace.
     """
-    
+
     def __init__(self, device: Optional[torch.device] = None, cache_dir: Path = DEFAULT_CACHE_DIR):
         """Initialize CLAVE embedder.
-        
+
         Args:
             device: torch device (auto-detected if None)
             cache_dir: Directory to cache CLAVE model files
@@ -54,24 +51,24 @@ class CLAVEEmbedder:
         self.device = torch.device("cpu")
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        
+
         self.model = None
         self.tokenizer = None
         self.max_length = 512
         # Default; will be inferred after model load
         self.embedding_dim = 512
-        
+
         # Try to load CLAVE
         self._available = self._try_load()
-    
+
     def _download_file(self, url: str, dest: Path, desc: str) -> bool:
         """Download a file with progress bar.
-        
+
         Args:
             url: URL to download from
             dest: Destination path
             desc: Description for progress bar
-        
+
         Returns:
             True if successful
         """
@@ -79,41 +76,41 @@ class CLAVEEmbedder:
             logger.info(f"Downloading {desc}...")
             response = requests.get(url, stream=True, timeout=300)
             response.raise_for_status()
-            
+
             total_size = int(response.headers.get("content-length", 0))
-            
+
             with open(dest, "wb") as f:
                 with tqdm(total=total_size, unit="B", unit_scale=True, desc=desc) as pbar:
                     for chunk in response.iter_content(chunk_size=8192):
                         if chunk:
                             f.write(chunk)
                             pbar.update(len(chunk))
-            
+
             logger.info(f"Downloaded {desc} to {dest}")
             return True
         except Exception as e:
             logger.error(f"Failed to download {desc}: {e}")
             return False
-    
+
     def _setup_clave(self) -> bool:
         """Download and extract CLAVE model files.
-        
+
         Returns:
             True if setup successful
         """
         model_rar = self.cache_dir / "model.rar"
         tokenizer_zip = self.cache_dir / "tokenizer_data.zip"
-        
+
         # Download model if needed
         if not model_rar.exists():
             if not self._download_file(CLAVE_URLS["model"], model_rar, "CLAVE model"):
                 return False
-        
+
         # Download tokenizer if needed
         if not tokenizer_zip.exists():
             if not self._download_file(CLAVE_URLS["tokenizer"], tokenizer_zip, "CLAVE tokenizer"):
                 return False
-        
+
         # Extract model — the archive contains CLAVE.pt directly (no model/ subdir)
         model_pt_candidates = [
             self.cache_dir / "model" / "CLAVE.pt",
@@ -129,9 +126,11 @@ class CLAVEEmbedder:
                 except Exception as rar_e:
                     logger.warning(f"rarfile extraction failed ({rar_e}), trying bsdtar...")
                     import subprocess
+
                     result = subprocess.run(
                         ["bsdtar", "xf", str(model_rar), "-C", str(self.cache_dir)],
-                        capture_output=True, text=True,
+                        capture_output=True,
+                        text=True,
                     )
                     if result.returncode != 0:
                         raise RuntimeError(f"bsdtar failed: {result.stderr}")
@@ -139,7 +138,7 @@ class CLAVEEmbedder:
             except Exception as e:
                 logger.error(f"Failed to extract CLAVE model: {e}")
                 return False
-        
+
         # Extract tokenizer
         tokenizer_dir = self.cache_dir / "tokenizer_data"
         if not tokenizer_dir.exists():
@@ -151,12 +150,12 @@ class CLAVEEmbedder:
             except Exception as e:
                 logger.error(f"Failed to extract CLAVE tokenizer: {e}")
                 return False
-        
+
         return True
-    
+
     def _try_load(self) -> bool:
         """Try to load CLAVE model and tokenizer.
-        
+
         Returns:
             True if successfully loaded
         """
@@ -165,7 +164,7 @@ class CLAVEEmbedder:
             if not self._setup_clave():
                 logger.warning("CLAVE setup failed. Model will not be available.")
                 return False
-            
+
             # Add extracted directories to sys.path for module discovery
             sys.path.insert(0, str(self.cache_dir))
             extracted_model_dir = self.cache_dir / "model"
@@ -182,7 +181,7 @@ class CLAVEEmbedder:
                 clave_src = clave_repo / "src"
                 if clave_src.exists():
                     sys.path.insert(0, str(clave_src))
-            
+
             # Try to import CLAVE modules
             try:
                 from model import FineTunedModel
@@ -190,10 +189,10 @@ class CLAVEEmbedder:
             except ImportError:
                 logger.warning("Could not import CLAVE modules. CLAVE not available.")
                 return False
-            
+
             # Load tokenizer
             self.tokenizer = SpTokenizer()
-            
+
             # Load model — architecture from eval.py in CLAVE repo
             self.model = FineTunedModel(
                 ntoken=self.tokenizer.get_vocab_size(),
@@ -217,8 +216,7 @@ class CLAVEEmbedder:
                 state_dict = checkpoint["model_state_dict"]
                 # Strip _orig_mod. prefix added by torch.compile
                 state_dict = {
-                    (k[10:] if k.startswith("_orig_mod.") else k): v
-                    for k, v in state_dict.items()
+                    (k[10:] if k.startswith("_orig_mod.") else k): v for k, v in state_dict.items()
                 }
                 self.model.load_state_dict(state_dict)
                 self.model.to(self.device)
@@ -229,49 +227,49 @@ class CLAVEEmbedder:
             else:
                 logger.warning(f"CLAVE model weights not found at {model_path}")
                 return False
-        
+
         except Exception as e:
             logger.warning(f"Failed to load CLAVE: {e}")
             return False
-    
+
     def is_available(self) -> bool:
         """Check if CLAVE model is available.
-        
+
         Returns:
             True if model loaded successfully
         """
         return self._available and self.model is not None
-    
+
     def _truncate_head_tail(self, tokens: List[int]) -> List[int]:
         """Apply head+tail truncation for long sequences.
-        
+
         Args:
             tokens: List of token IDs
-        
+
         Returns:
             Truncated list of token IDs
         """
         if len(tokens) <= self.max_length:
             return tokens
-        
+
         half = self.max_length // 2
         head = tokens[:half]
         tail = tokens[-half:]
         return head + tail
-    
+
     def embed(self, code: str) -> Optional[np.ndarray]:
         """Embed a single code snippet.
-        
+
         Args:
             code: Python source code string
-        
+
         Returns:
             Embedding vector (shape: embedding_dim,) or None if unavailable
         """
         if not self.is_available():
             logger.warning("CLAVE not available, cannot embed")
             return None
-        
+
         try:
             # Tokenize — SpTokenizer.tokenizes() encodes a string to token ids
             tokens = self.tokenizer.tokenizes(code)
@@ -285,37 +283,39 @@ class CLAVEEmbedder:
                 embedding = self.model(input_tensor)
 
             return embedding.cpu().numpy().flatten()
-        
+
         except Exception as e:
             logger.error(f"Failed to embed with CLAVE: {e}")
             return None
-    
-    def embed_batch(self, codes: List[str], batch_size: int = 16, show_progress: bool = True) -> Optional[np.ndarray]:
+
+    def embed_batch(
+        self, codes: List[str], batch_size: int = 16, show_progress: bool = True
+    ) -> Optional[np.ndarray]:
         """Embed a batch of code snippets.
-        
+
         Args:
             codes: List of Python source code strings
             batch_size: Number of samples to process at once
             show_progress: Whether to show progress bar
-        
+
         Returns:
             Embedding matrix (shape: n_samples, embedding_dim) or None if unavailable
         """
         if not self.is_available():
             logger.warning("CLAVE not available, cannot embed batch")
             return None
-        
+
         embeddings = []
-        
+
         iterator = range(0, len(codes), batch_size)
         if show_progress:
             total_batches = math.ceil(len(codes) / max(1, batch_size))
             iterator = tqdm(iterator, desc="Embedding with CLAVE", total=total_batches)
-        
+
         for i in iterator:
-            batch = codes[i:i + batch_size]
+            batch = codes[i : i + batch_size]
             batch_embeddings = []
-            
+
             for code in batch:
                 embedding = self.embed(code)
                 if embedding is not None:
@@ -323,27 +323,27 @@ class CLAVEEmbedder:
                 else:
                     # Return zeros if embedding failed
                     batch_embeddings.append(np.zeros(self.embedding_dim, dtype=np.float32))
-            
+
             embeddings.append(np.vstack(batch_embeddings))
-        
+
         return np.vstack(embeddings)
-    
+
     def __del__(self):
         """Clean up model from memory when done."""
-        if hasattr(self, 'model') and self.model is not None:
+        if hasattr(self, "model") and self.model is not None:
             del self.model
-        if hasattr(self, 'tokenizer') and self.tokenizer is not None:
+        if hasattr(self, "tokenizer") and self.tokenizer is not None:
             del self.tokenizer
         torch.cuda.empty_cache() if torch.cuda.is_available() else None
 
 
 def get_clave_embedder(device: Optional[torch.device] = None, cache_dir: Path = DEFAULT_CACHE_DIR):
     """Factory function to get CLAVE embedder.
-    
+
     Args:
         device: Optional torch device
         cache_dir: Optional custom cache directory
-    
+
     Returns:
         CLAVEEmbedder instance (may not be available)
     """

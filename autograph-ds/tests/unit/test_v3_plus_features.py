@@ -1,5 +1,5 @@
-import pytest
 from src.features.extractor import LogicalDNAExtractor
+
 
 def test_syntactic_bias():
     extractor = LogicalDNAExtractor()
@@ -16,9 +16,10 @@ def foo():
             pass
 """
     dna = extractor.extract(code, enabled_buckets=["syntactic_bias"])
-    assert dna["literal_collection_ratio"] == 0.0 # because we used list()
-    assert dna["boolean_style_score"] == 1.0 # because of 'is True'
+    assert dna["literal_collection_ratio"] == 0.0  # because we used list()
+    assert dna["boolean_style_score"] == 1.0  # because of 'is True'
     assert dna["exception_depth"] > 1.0
+
 
 def test_logic_flow():
     extractor = LogicalDNAExtractor()
@@ -28,6 +29,7 @@ def foo(data):
 """
     dna = extractor.extract(code, enabled_buckets=["logic_flow"])
     assert dna["functional_score"] == 1.0
+
 
 def test_logic_flow_procedural():
     extractor = LogicalDNAExtractor()

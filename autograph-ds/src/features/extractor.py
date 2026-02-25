@@ -17,7 +17,8 @@ from .strings import StringContentExtractor
 # New feature extractors for enhanced semantic analysis
 SEMANTIC_EXTRACTOR = SemanticFingerprintExtractor()
 COMPLEXITY_EXTRACTOR = CyclomaticComplexityExtractor()
-STRING_EXTRACTOR = StringContentExtractor()        
+STRING_EXTRACTOR = StringContentExtractor()
+
 
 class LogicalDNAExtractor:
     def __init__(self):
@@ -48,8 +49,8 @@ class LogicalDNAExtractor:
 
         if enabled_buckets is None:
             enabled_buckets = [
-                "structural_topology", 
-                "micro_stylistics", 
+                "structural_topology",
+                "micro_stylistics",
                 "logical_idioms",
                 "cfg_complexity",
                 "comment_stylistics",
@@ -59,8 +60,8 @@ class LogicalDNAExtractor:
                 "syntactic_bias",
                 "logic_flow",
                 "semantic_fingerprint",  # NEW: Import and API call analysis
-                "cyclomatic_complexity",   # NEW: McCabe complexity metrics
-                "string_content"           # NEW: String semantic analysis
+                "cyclomatic_complexity",  # NEW: McCabe complexity metrics
+                "string_content",  # NEW: String semantic analysis
             ]
 
         try:
@@ -68,15 +69,15 @@ class LogicalDNAExtractor:
             root_node = tree.root_node
         except Exception as e:
             raise ValueError(f"Failed to parse code: {e}")
-        
+
         dna = {}
-        
+
         if "structural_topology" in enabled_buckets:
             dna.update(self._extract_structural(root_node))
-        
+
         if "micro_stylistics" in enabled_buckets:
             dna.update(self._extract_stylistic(code, root_node))
-            
+
         if "logical_idioms" in enabled_buckets:
             dna.update(self._extract_idiomatic(code, root_node))
 
@@ -88,28 +89,28 @@ class LogicalDNAExtractor:
 
         if "ast_trigrams" in enabled_buckets:
             dna["top_trigrams"] = self._extract_trigrams(root_node)
-            
+
         if "layout_rhythm" in enabled_buckets:
             dna.update(self.layout_extractor.extract(code))
-            
+
         if "lexical_complexity" in enabled_buckets:
             dna.update(self.lexical_extractor.extract(code, root_node))
-            
+
         if "syntactic_bias" in enabled_buckets:
             dna.update(self.syntactic_extractor.extract(code, root_node))
-            
+
         if "logic_flow" in enabled_buckets:
             dna.update(self.flow_extractor.extract(code, root_node))
-        
+
         if "semantic_fingerprint" in enabled_buckets:
             dna.update(SEMANTIC_EXTRACTOR.extract(code, root_node))
-            
+
         if "cyclomatic_complexity" in enabled_buckets:
             dna.update(COMPLEXITY_EXTRACTOR.extract(code, root_node))
-            
+
         if "string_content" in enabled_buckets:
             dna.update(STRING_EXTRACTOR.extract(code, root_node))
-        
+
         return dna
 
     def _extract_structural(self, root_node: Node) -> Dict[str, Any]:
@@ -120,43 +121,43 @@ class LogicalDNAExtractor:
         def traverse(node: Node, depth: int):
             node_types.append(node.type)
             depths.append(depth)
-            
+
             child_count = node.child_count
             if child_count > 0:
                 branching_factors.append(child_count)
-            
+
             for child in node.children:
                 traverse(child, depth + 1)
 
         traverse(root_node, 0)
-        
+
         counts = Counter(node_types)
         total_nodes = len(node_types)
-        
+
         # Normalize counts
         node_type_dist = {k: v / total_nodes for k, v in counts.items()}
-        
+
         return {
             "node_type_counts": node_type_dist,
             "max_nesting_depth": max(depths) if depths else 0,
             "avg_branching_factor": np.mean(branching_factors) if branching_factors else 0,
-            "total_nodes": total_nodes
+            "total_nodes": total_nodes,
         }
 
     def _extract_stylistic(self, code: str, root_node: Node) -> Dict[str, Any]:
         lines = code.splitlines()
-        
+
         # Indentation detection
         indent_widths = []
-        indent_types = [] # 0 for space, 1 for tab
-        
+        indent_types = []  # 0 for space, 1 for tab
+
         for line in lines:
             if not line.strip():
                 continue
-            match = re.match(r'^(\s+)', line)
+            match = re.match(r"^(\s+)", line)
             if match:
                 indent = match.group(1)
-                if '\t' in indent:
+                if "\t" in indent:
                     indent_types.append(1)
                 else:
                     indent_types.append(0)
@@ -170,17 +171,17 @@ class LogicalDNAExtractor:
             "'": quote_counts.get("'", 0),
             '"': quote_counts.get('"', 0),
             "'''": quote_counts.get("'''", 0),
-            '"""': quote_counts.get('"""', 0)
+            '"""': quote_counts.get('"""', 0),
         }
-        
+
         # Trailing commas in lists/dicts (simplified)
         trailing_commas = len(re.findall(r",\s*[\]\}]", code))
-        
+
         return {
-            "indent_type": np.mean(indent_types) if indent_types else 0.5, # ratio of tabs
+            "indent_type": np.mean(indent_types) if indent_types else 0.5,  # ratio of tabs
             "indent_width": np.median(indent_widths) if indent_widths else 4,
             "quote_preference": quote_prefs,
-            "trailing_commas_count": trailing_commas
+            "trailing_commas_count": trailing_commas,
         }
 
     def _extract_idiomatic(self, code: str, root_node: Node) -> Dict[str, Any]:
@@ -188,25 +189,27 @@ class LogicalDNAExtractor:
         identifiers = re.findall(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\b", code)
         snake_case = [id for id in identifiers if "_" in id and id.islower()]
         camel_case = [id for id in identifiers if any(c.isupper() for c in id) and id[0].islower()]
-        
+
         # f-strings vs .format
         f_strings = len(re.findall(r"f['\"]", code))
         format_calls = len(re.findall(r"\.format\(", code))
-        
+
         # Comprehensions
         list_comps = len(re.findall(r"\[.*for.*in.*\]", code))
-        
+
         # More structural features for idiomatic bucket
         try_excepts = len(re.findall(r"\btry\b", code))
         classes = len(re.findall(r"\bclass\b", code))
-        
+
         return {
             "snake_case_ratio": len(snake_case) / len(identifiers) if identifiers else 0,
             "camel_case_ratio": len(camel_case) / len(identifiers) if identifiers else 0,
-            "f_string_ratio": f_strings / (f_strings + format_calls) if (f_strings + format_calls) > 0 else 0.5,
+            "f_string_ratio": (
+                f_strings / (f_strings + format_calls) if (f_strings + format_calls) > 0 else 0.5
+            ),
             "list_comprehension_count": list_comps,
             "try_except_count": try_excepts,
-            "class_definition_count": classes
+            "class_definition_count": classes,
         }
 
     def _extract_cfg_complexity(self, code: str, root_node: Node) -> Dict[str, Any]:
@@ -221,44 +224,44 @@ class LogicalDNAExtractor:
 
         def traverse(node: Node, in_func: bool = False, func_start_line: int = -1):
             nonlocal while_trues, while_total, guard_clauses
-            
+
             # Identify early exits inside functions
-            if node.type in ('return_statement', 'raise_statement', 'continue_statement'):
+            if node.type in ("return_statement", "raise_statement", "continue_statement"):
                 if in_func:
                     early_exits.append(node)
                     # Guard clause heuristic: exit in the first 5 lines of a function
                     if 0 <= node.start_point[0] - func_start_line < 5:
                         guard_clauses += 1
-            
-            if node.type == 'break_statement':
+
+            if node.type == "break_statement":
                 breaks.append(node)
 
-            if node.type == 'while_statement':
+            if node.type == "while_statement":
                 while_total += 1
                 # Check for 'while True:'
-                condition = node.child_by_field_name('condition')
-                if condition and condition.type == 'true':
+                condition = node.child_by_field_name("condition")
+                if condition and condition.type == "true":
                     while_trues += 1
 
             # Recurse with context
-            is_func = node.type == 'function_definition'
+            is_func = node.type == "function_definition"
             new_func_start = node.start_point[0] if is_func else func_start_line
-            
+
             for child in node.children:
                 traverse(child, in_func=(in_func or is_func), func_start_line=new_func_start)
 
         traverse(root_node)
-        
+
         total_loc = len(code.splitlines())
-        
+
         # Guard clause heuristic: exits that happen early in the function body
         exit_density = len(early_exits) / total_loc if total_loc > 0 else 0
-        
+
         return {
             "exit_density": exit_density,
             "guard_clause_score": guard_clauses,
             "while_true_ratio": while_trues / while_total if while_total > 0 else 0,
-            "break_statement_count": len(breaks)
+            "break_statement_count": len(breaks),
         }
 
     def _extract_trigrams(self, root_node: Node) -> Dict[str, int]:
@@ -274,11 +277,11 @@ class LogicalDNAExtractor:
                 traverse(child)
 
         traverse(root_node)
-        
+
         trigrams = []
         for i in range(len(node_types) - 2):
-            trigrams.append(tuple(node_types[i:i+3]))
-        
+            trigrams.append(tuple(node_types[i : i + 3]))
+
         # Return a counter of stringified trigrams
         counts = Counter([f"{t[0]}:{t[1]}:{t[2]}" for t in trigrams])
         return dict(counts)

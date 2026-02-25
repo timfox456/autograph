@@ -1,13 +1,14 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 import logging
 
 import numpy as np
 import pandas as pd
 
-from src.utils import sanitize_feature_names, validate_input_features
+from src.utils import sanitize_feature_names
 
 logger = logging.getLogger(__name__)
+
 
 class BaseModel(ABC):
     def __init__(self):
@@ -16,7 +17,7 @@ class BaseModel(ABC):
     def _sanitize_feature_names(self, feature_names: list[str]) -> list[str]:
         """
         Sanitizes feature names for model compatibility.
-        
+
         DEPRECATED: Use sanitize_feature_names from src.utils directly.
         This method is kept for backward compatibility.
         """
@@ -25,29 +26,29 @@ class BaseModel(ABC):
     def _validate_input(self, X: pd.DataFrame, context: Optional[str] = None) -> None:
         """
         Validate input features for NaN/inf values.
-        
+
         Args:
             X: Input DataFrame to validate
             context: Optional context string for error messages
-            
+
         Raises:
             ValueError: If validation fails (e.g., all NaN column)
         """
         context_str = f" ({context})" if context else ""
-        
+
         for col in X.columns:
             series = X[col]
-            
+
             # Check for all-NaN columns
             if series.isna().all():
                 raise ValueError(
                     f"Column '{col}' contains all NaN values{context_str}. "
                     "Please check your input data."
                 )
-            
+
             # Check for infinite values in numeric columns
             try:
-                numeric_series = pd.to_numeric(series, errors='coerce')
+                numeric_series = pd.to_numeric(series, errors="coerce")
                 inf_mask = np.isinf(numeric_series)
                 inf_count = inf_mask.sum()
                 if inf_count > 0:
@@ -62,7 +63,7 @@ class BaseModel(ABC):
         """
         Ensures X_df has all expected features in the correct order.
         Missing features are filled with 0.
-        
+
         Also validates input for NaN/inf issues.
         """
         if not isinstance(X_df, pd.DataFrame):
@@ -70,18 +71,16 @@ class BaseModel(ABC):
             X_df = pd.DataFrame([X_df])
 
         expected = expected_features if expected_features is not None else self.features
-        
+
         # Validate expected features are provided
         if not expected:
             raise ValueError("No expected features provided. Model may not be trained.")
-        
+
         missing_cols = [col for col in expected if col not in X_df.columns]
         if missing_cols:
             # Create a DataFrame of zeros for missing columns
             missing_data = pd.DataFrame(
-                np.zeros((len(X_df), len(missing_cols))),
-                columns=missing_cols,
-                index=X_df.index
+                np.zeros((len(X_df), len(missing_cols))), columns=missing_cols, index=X_df.index
             )
             X_test = pd.concat([X_df, missing_data], axis=1)
         else:
@@ -89,7 +88,7 @@ class BaseModel(ABC):
 
         # Validate the prepared features
         self._validate_input(X_test[expected], context="feature preparation")
-        
+
         return X_test[expected]
 
 
@@ -97,6 +96,7 @@ class IdentityModel(BaseModel):
     """
     Interface for identity matching models.
     """
+
     @abstractmethod
     def train(self, X, y, feature_names: List[str]):
         """Train the model on features X and labels y."""
@@ -112,7 +112,7 @@ class IdentityModel(BaseModel):
         # Default implementation: loop over rows
         if not isinstance(X_df, pd.DataFrame):
             X_df = pd.DataFrame([X_df])
-        
+
         results = []
         for i in range(len(X_df)):
             results.append(self.predict_probs(X_df.iloc[[i]]))
@@ -138,6 +138,7 @@ class AnomalyModel(BaseModel):
     """
     Interface for anomaly detection (consistency) models.
     """
+
     @abstractmethod
     def train(self, X, feature_names: List[str], identities: Any):
         """Train the model on features X."""
@@ -146,7 +147,7 @@ class AnomalyModel(BaseModel):
     @abstractmethod
     def score(self, identity: str, X_df: Any) -> Tuple[Optional[int], Optional[float]]:
         """
-        Returns (prediction, score). 
+        Returns (prediction, score).
         Prediction: 1 for normal, -1 for anomaly.
         Score: Continuous value where higher is more normal.
         """

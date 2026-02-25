@@ -1,12 +1,14 @@
 from dataclasses import dataclass
 from typing import List
 
+
 @dataclass
 class FeatureBucket:
     name: str
     description: str
     features: List[str]
     privacy_level: str  # 'High', 'Medium', 'Low'
+
 
 # Bucket A: Structural Topology (High Privacy - Minimal PII)
 STRUCTURAL_BUCKET = FeatureBucket(
@@ -18,7 +20,7 @@ STRUCTURAL_BUCKET = FeatureBucket(
         "avg_branching_factor",
         "total_nodes",
     ],
-    privacy_level="High"
+    privacy_level="High",
 )
 
 # Bucket B: Micro-Stylistics (Medium Privacy - Formatting traits)
@@ -31,7 +33,7 @@ STYLISTIC_BUCKET = FeatureBucket(
         "quote_preference",
         "trailing_commas_count",
     ],
-    privacy_level="Medium"
+    privacy_level="Medium",
 )
 
 # Bucket C: Logical Idioms (Low Privacy - Author-specific patterns)
@@ -46,7 +48,7 @@ IDIOMATIC_BUCKET = FeatureBucket(
         "try_except_count",
         "class_definition_count",
     ],
-    privacy_level="Low"
+    privacy_level="Low",
 )
 
 # Bucket D: CFG Complexity (Medium Privacy - Execution flow patterns)
@@ -59,7 +61,7 @@ CFG_BUCKET = FeatureBucket(
         "while_true_ratio",
         "break_statement_count",
     ],
-    privacy_level="Medium"
+    privacy_level="Medium",
 )
 
 # Bucket E: Comment Stylistics (Low Privacy - Linguistic flavor)
@@ -77,7 +79,7 @@ COMMENT_BUCKET = FeatureBucket(
         "emoji_density",
         "colorful_language_ratio",
     ],
-    privacy_level="Low"
+    privacy_level="Low",
 )
 
 # Bucket F: AST Trigrams (High Privacy - Structural fingerprint)
@@ -87,7 +89,7 @@ TRIGRAM_BUCKET = FeatureBucket(
     features=[
         "top_trigrams",  # note: flattened into 500+ features during vectorization
     ],
-    privacy_level="High"
+    privacy_level="High",
 )
 
 # Bucket G: Layout Rhythm (Medium Privacy - Vertical spacing and layout)
@@ -99,7 +101,7 @@ LAYOUT_BUCKET = FeatureBucket(
         "avg_vertical_chunk_size",
         "max_consecutive_newlines",
     ],
-    privacy_level="Medium"
+    privacy_level="Medium",
 )
 
 # Bucket H: Lexical Complexity (Low Privacy - Identifier naming traits)
@@ -111,7 +113,7 @@ LEXICAL_BUCKET = FeatureBucket(
         "short_identifier_ratio",
         "identifier_entropy",
     ],
-    privacy_level="Low"
+    privacy_level="Low",
 )
 
 # Bucket I: Syntactic Bias (Medium Privacy - Syntax and safety patterns)
@@ -123,7 +125,7 @@ SYNTACTIC_BUCKET = FeatureBucket(
         "boolean_style_score",
         "exception_depth",
     ],
-    privacy_level="Medium"
+    privacy_level="Medium",
 )
 
 # Bucket J: Logic Flow (High Privacy - Functional vs procedural bias)
@@ -133,12 +135,12 @@ FLOW_BUCKET = FeatureBucket(
     features=[
         "functional_score",
     ],
-    privacy_level="High"
+    privacy_level="High",
 )
 
 ALL_BUCKETS = [
-    STRUCTURAL_BUCKET, 
-    STYLISTIC_BUCKET, 
+    STRUCTURAL_BUCKET,
+    STYLISTIC_BUCKET,
     IDIOMATIC_BUCKET,
     CFG_BUCKET,
     COMMENT_BUCKET,
@@ -146,5 +148,5 @@ ALL_BUCKETS = [
     LAYOUT_BUCKET,
     LEXICAL_BUCKET,
     SYNTACTIC_BUCKET,
-    FLOW_BUCKET
+    FLOW_BUCKET,
 ]

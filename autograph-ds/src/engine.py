@@ -3,14 +3,16 @@ from src.models.supervised import IdentityMatcher
 from src.models.anomaly import ConsistencyChecker
 from src.models.heuristics import HeuristicDetector
 from src.utils import flatten_dna
-import numpy as np
 import os
 import math
 
+
 class AttestationEngine:
-    AI_IDENTITIES = frozenset(['deepseek', 'gpt4o', 'gemini'])
-    
-    def __init__(self, matcher_path=None, consistency_dir=None, matcher_impl=None, consistency_impl=None):
+    AI_IDENTITIES = frozenset(["deepseek", "gpt4o", "gemini"])
+
+    def __init__(
+        self, matcher_path=None, consistency_dir=None, matcher_impl=None, consistency_impl=None
+    ):
         """
         Initialize the AttestationEngine with models.
 
@@ -34,10 +36,12 @@ class AttestationEngine:
                 self.matcher.load(matcher_path)
             except Exception as e:
                 raise Exception(f"Failed to load matcher model: {e}")
-        
+
         if consistency_dir:
             if not os.path.exists(consistency_dir):
-                raise FileNotFoundError(f"Consistency models directory not found at: {consistency_dir}")
+                raise FileNotFoundError(
+                    f"Consistency models directory not found at: {consistency_dir}"
+                )
             try:
                 self.consistency.load(consistency_dir)
             except Exception as e:
@@ -63,38 +67,50 @@ class AttestationEngine:
 
         # Ensure matcher is trained/loaded
         matcher_trained = None
-        if hasattr(self.matcher, 'is_trained'):
+        if hasattr(self.matcher, "is_trained"):
             try:
                 matcher_trained = bool(self.matcher.is_trained())
             except Exception:
                 matcher_trained = None
-        if matcher_trained is None and hasattr(self.matcher, 'implementation') and hasattr(self.matcher.implementation, 'is_trained'):
+        if (
+            matcher_trained is None
+            and hasattr(self.matcher, "implementation")
+            and hasattr(self.matcher.implementation, "is_trained")
+        ):
             try:
                 matcher_trained = bool(self.matcher.implementation.is_trained())
             except Exception:
                 matcher_trained = None
         if matcher_trained is None:
             # Fallback to fragile check for legacy objects
-            matcher_trained = hasattr(self.matcher, 'features') and bool(getattr(self.matcher, 'features'))
+            matcher_trained = hasattr(self.matcher, "features") and bool(
+                getattr(self.matcher, "features")
+            )
 
         if not matcher_trained:
             raise ValueError("Matcher model is not trained or loaded.")
 
         # Ensure consistency checker is trained/loaded
         consistency_trained = None
-        if hasattr(self.consistency, 'is_trained'):
+        if hasattr(self.consistency, "is_trained"):
             try:
                 consistency_trained = bool(self.consistency.is_trained())
             except Exception:
                 consistency_trained = None
-        if consistency_trained is None and hasattr(self.consistency, 'implementation') and hasattr(self.consistency.implementation, 'is_trained'):
+        if (
+            consistency_trained is None
+            and hasattr(self.consistency, "implementation")
+            and hasattr(self.consistency.implementation, "is_trained")
+        ):
             try:
                 consistency_trained = bool(self.consistency.implementation.is_trained())
             except Exception:
                 consistency_trained = None
         if consistency_trained is None:
             # Fallback: legacy objects expose features after training
-            consistency_trained = hasattr(self.consistency, 'features') and bool(getattr(self.consistency, 'features'))
+            consistency_trained = hasattr(self.consistency, "features") and bool(
+                getattr(self.consistency, "features")
+            )
         if not consistency_trained:
             raise ValueError("Consistency model is not trained or loaded.")
 
@@ -103,55 +119,69 @@ class AttestationEngine:
             dna = self.extractor.extract(code, enabled_buckets)
         except Exception as e:
             raise Exception(f"Failed to extract DNA features: {e}")
-        
+
         # Flatten for models (simplified flattening for the engine)
         # In a real system, we'd use the same process_dataset logic
         flat_dna = self._flatten_for_engine(dna)
-        
+
         # 2. Supervised Match (support both interface and legacy wrapper)
-        if hasattr(self.matcher, 'predict_probs'):
+        if hasattr(self.matcher, "predict_probs"):
             match_probs = self.matcher.predict_probs(flat_dna)
-        elif hasattr(self.matcher, 'predict'):
+        elif hasattr(self.matcher, "predict"):
             match_probs = self.matcher.predict(flat_dna)
-        elif hasattr(self.matcher, 'implementation') and hasattr(self.matcher.implementation, 'predict_probs'):
+        elif hasattr(self.matcher, "implementation") and hasattr(
+            self.matcher.implementation, "predict_probs"
+        ):
             match_probs = self.matcher.implementation.predict_probs(flat_dna)
         else:
-            raise AttributeError("Matcher implementation must provide predict_probs() or predict().")
+            raise AttributeError(
+                "Matcher implementation must provide predict_probs() or predict()."
+            )
         top_match, top_prob = match_probs[0]
-        
+
         # 3. Consistency Check (support both interface and legacy wrapper)
-        if hasattr(self.consistency, 'score'):
+        if hasattr(self.consistency, "score"):
             consistency_pred, consistency_score = self.consistency.score(claimed_identity, flat_dna)
-        elif hasattr(self.consistency, 'check_consistency'):
-            consistency_pred, consistency_score = self.consistency.check_consistency(claimed_identity, flat_dna)
-        elif hasattr(self.consistency, 'implementation') and hasattr(self.consistency.implementation, 'score'):
-            consistency_pred, consistency_score = self.consistency.implementation.score(claimed_identity, flat_dna)
+        elif hasattr(self.consistency, "check_consistency"):
+            consistency_pred, consistency_score = self.consistency.check_consistency(
+                claimed_identity, flat_dna
+            )
+        elif hasattr(self.consistency, "implementation") and hasattr(
+            self.consistency.implementation, "score"
+        ):
+            consistency_pred, consistency_score = self.consistency.implementation.score(
+                claimed_identity, flat_dna
+            )
         else:
-            raise AttributeError("Consistency implementation must provide score() or check_consistency().")
-        
+            raise AttributeError(
+                "Consistency implementation must provide score() or check_consistency()."
+            )
+
         # 4. Heuristic Flags
         h_flags = self.heuristics.verify_metadata(code, claimed_identity)
         h_markers = self.heuristics.detect_markers(code)
-        
+
         # 5. Compute extended metrics
         corpus_probability = self._compute_corpus_probability(match_probs, claimed_identity)
         corpus_percentile = self._compute_corpus_percentile(consistency_score, claimed_identity)
-        ai_probability, detected_ai_identity, detected_ai_prob = self._compute_ai_probability(match_probs)
-        
+        ai_probability, detected_ai_identity, detected_ai_prob = self._compute_ai_probability(
+            match_probs
+        )
+
         # 6. Combine results
-        is_match = (top_match == claimed_identity)
+        is_match = top_match == claimed_identity
         confidence = top_prob
-        
+
         # Scale confidence based on consistency and heuristics
         if consistency_pred == -1:
             confidence *= 0.5
         if h_flags:
             confidence *= 0.2
-        
+
         # Information density calculation
         bucket_count = len(enabled_buckets) if enabled_buckets else 3
         density_score = bucket_count / 3.0
-        
+
         return {
             "claimed_identity": claimed_identity,
             "detected_identity": top_match,
@@ -159,7 +189,9 @@ class AttestationEngine:
             "confidence": float(confidence),
             "corpus_probability": float(corpus_probability),
             "corpus_percentile": float(corpus_percentile),
-            "consistency": "PASS" if consistency_pred == 1 else "FAIL" if consistency_pred == -1 else "UNKNOWN",
+            "consistency": (
+                "PASS" if consistency_pred == 1 else "FAIL" if consistency_pred == -1 else "UNKNOWN"
+            ),
             "consistency_score": float(consistency_score) if consistency_score is not None else 0.0,
             "ai_probability": float(ai_probability),
             "detected_ai_identity": detected_ai_identity,
@@ -167,17 +199,17 @@ class AttestationEngine:
             "flags": h_flags,
             "markers": h_markers,
             "privacy_density": density_score,
-            "verdict": self._get_verdict(is_match, corpus_probability, consistency_pred, h_flags)
+            "verdict": self._get_verdict(is_match, corpus_probability, consistency_pred, h_flags),
         }
 
     def _compute_corpus_probability(self, match_probs, claimed_identity):
         """
         Compute corpus probability for claimed identity.
-        
+
         Args:
             match_probs: List of (identity, probability) tuples from predict_probs
             claimed_identity: The identity claiming authorship
-        
+
         Returns:
             float: Probability that code belongs to claimed identity's corpus
         """
@@ -187,7 +219,7 @@ class AttestationEngine:
             if identity == claimed_identity:
                 claimed_prob = prob
                 break
-        
+
         if claimed_prob is None:
             return 0.0
 
@@ -226,37 +258,37 @@ class AttestationEngine:
     def _compute_ai_probability(self, match_probs):
         """
         Compute probability that code is AI-generated.
-        
+
         Args:
             match_probs: List of (identity, probability) tuples
-        
+
         Returns:
             tuple: (ai_probability, top_ai_identity, top_ai_probability)
         """
         ai_probs = [(i, p) for i, p in match_probs if i in self.AI_IDENTITIES]
-        
+
         if not ai_probs:
             return 0.0, None, 0.0
-        
+
         ai_probability = sum(p for _, p in ai_probs)
         top_ai = max(ai_probs, key=lambda x: x[1])
-        
+
         return ai_probability, top_ai[0], top_ai[1]
 
     def _get_verdict(self, is_match, corpus_probability, consistency, flags):
         """
         Determine attestation verdict based on match and corpus probability.
-        
+
         Uses corpus_probability (probability of claimed identity) rather than
         confidence (which may be scaled by consistency penalties) to ensure
         correct matches aren't marked as MISMATCH due to secondary signals.
-        
+
         Args:
             is_match: Whether detected identity matches claimed identity
             corpus_probability: Probability that code belongs to claimed identity's corpus
             consistency: Consistency check result (1=PASS, -1=FAIL, None=UNKNOWN)
             flags: Heuristic flags indicating potential spoofing
-        
+
         Returns:
             str: One of VERIFIED, UNCERTAIN, MISMATCH, SPOOFING_DETECTED
         """

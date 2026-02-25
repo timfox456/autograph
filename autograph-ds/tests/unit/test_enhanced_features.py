@@ -1,5 +1,5 @@
-import pytest
 from src.features.extractor import LogicalDNAExtractor
+
 
 def test_cfg_complexity_early_exits():
     extractor = LogicalDNAExtractor()
@@ -21,6 +21,7 @@ def process(x):
     # Guard clauses (return 0 and raise ValueError) are in the first few lines
     assert cfg["guard_clause_score"] >= 2
 
+
 def test_cfg_while_true():
     extractor = LogicalDNAExtractor()
     code = """
@@ -31,6 +32,7 @@ while True:
     dna = extractor.extract(code, enabled_buckets=["cfg_complexity"])
     assert dna["while_true_ratio"] == 1.0
     assert dna["break_statement_count"] == 1
+
 
 def test_comment_stylistics():
     extractor = LogicalDNAExtractor()
@@ -51,6 +53,7 @@ def add(a, b):
     assert dna["has_docstrings"] is True
     assert dna["all_caps_ratio"] > 0
 
+
 def test_dead_code_detection():
     extractor = LogicalDNAExtractor()
     code = """
@@ -61,6 +64,7 @@ x = 1
 """
     dna = extractor.extract(code, enabled_buckets=["comment_stylistics"])
     assert dna["dead_code_density"] > 0
+
 
 def test_ast_trigrams():
     extractor = LogicalDNAExtractor()

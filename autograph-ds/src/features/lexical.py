@@ -1,9 +1,9 @@
 import numpy as np
-import re
 import math
 from collections import Counter
-from typing import Dict, Any, List
+from typing import Dict, Any
 from tree_sitter import Node
+
 
 class LexicalComplexityExtractor:
     """
@@ -14,8 +14,8 @@ class LexicalComplexityExtractor:
         identifiers = []
 
         def traverse(node: Node):
-            if node.type == 'identifier':
-                name = node.text.decode('utf-8', errors='ignore')
+            if node.type == "identifier":
+                name = node.text.decode("utf-8", errors="ignore")
                 identifiers.append(name)
             for child in node.children:
                 traverse(child)
@@ -26,12 +26,12 @@ class LexicalComplexityExtractor:
             return {
                 "avg_identifier_length": 0,
                 "short_identifier_ratio": 0,
-                "identifier_entropy": 0
+                "identifier_entropy": 0,
             }
 
         lengths = [len(id) for id in identifiers]
         short_ids = [id for id in identifiers if len(id) <= 3]
-        
+
         # Calculate character-level entropy across all identifiers
         all_chars = "".join(identifiers)
         entropy = self._calculate_entropy(all_chars)
@@ -39,7 +39,7 @@ class LexicalComplexityExtractor:
         return {
             "avg_identifier_length": float(np.mean(lengths)),
             "short_identifier_ratio": len(short_ids) / len(identifiers),
-            "identifier_entropy": entropy
+            "identifier_entropy": entropy,
         }
 
     def _calculate_entropy(self, text: str) -> float:

@@ -208,6 +208,11 @@ def _python_syntax_error(code: str) -> "Optional[SyntaxError]":
         return e
 
 
+def _is_valid_python(code: str) -> bool:
+    """Returns True if the code is valid Python, False otherwise."""
+    return _python_syntax_error(code) is None
+
+
 def _count_code_lines(code: str) -> int:
     count = 0
     for line in code.splitlines():

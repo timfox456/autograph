@@ -9,10 +9,10 @@ Covers:
                sidecar JSON, quality gates (min lines, syntax validation),
                content deduplication, API error recovery, fixed prompt assignment
 """
+
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from generate_ai_samples import (
     PROMPTS,
@@ -34,8 +34,8 @@ from generate_ai_samples import (
 # Fixtures
 # ---------------------------------------------------------------------------
 
-GOOD_CODE = "def add(a, b):\n    \"\"\"Add two numbers.\"\"\"\n    return a + b"
-GOOD_CODE_ALT = "def subtract(a, b):\n    \"\"\"Subtract b from a.\"\"\"\n    return a - b"
+GOOD_CODE = 'def add(a, b):\n    """Add two numbers."""\n    return a + b'
+GOOD_CODE_ALT = 'def subtract(a, b):\n    """Subtract b from a."""\n    return a - b'
 
 
 def _unique_code(tag):
@@ -46,6 +46,7 @@ def _unique_code(tag):
 # ---------------------------------------------------------------------------
 # clean_code
 # ---------------------------------------------------------------------------
+
 
 class TestCleanCode:
     def test_strips_python_fence(self):
@@ -81,6 +82,7 @@ class TestCleanCode:
 # _content_hash
 # ---------------------------------------------------------------------------
 
+
 class TestContentHash:
     def test_deterministic(self):
         code = "def foo(): pass"
@@ -105,6 +107,7 @@ class TestContentHash:
 # ---------------------------------------------------------------------------
 # _is_valid_python
 # ---------------------------------------------------------------------------
+
 
 class TestIsValidPython:
     def test_valid_function(self):
@@ -132,6 +135,7 @@ class TestIsValidPython:
 # ---------------------------------------------------------------------------
 # _count_code_lines
 # ---------------------------------------------------------------------------
+
 
 class TestCountCodeLines:
     def test_counts_non_blank_non_comment_lines(self):
@@ -162,6 +166,7 @@ class TestCountCodeLines:
 # ---------------------------------------------------------------------------
 # Fetcher Factories — availability checks
 # ---------------------------------------------------------------------------
+
 
 class TestFetcherFactories:
 
@@ -223,8 +228,10 @@ class TestFetcherFactories:
     def test_gemini_returns_callable_when_available(self):
         mock_genai = MagicMock()
         mock_types = MagicMock()
-        with patch("generate_ai_samples.genai", mock_genai), \
-             patch("generate_ai_samples.types", mock_types):
+        with (
+            patch("generate_ai_samples.genai", mock_genai),
+            patch("generate_ai_samples.types", mock_types),
+        ):
             fn = _make_gemini_fetcher("sk-fake", "gemini-2.5-flash")
         assert callable(fn)
 
@@ -284,6 +291,7 @@ class TestFetcherFactories:
 # collect_for_identity — core collection loop
 # ---------------------------------------------------------------------------
 
+
 class TestCollectForIdentity:
 
     # --- Idempotency ---
@@ -334,7 +342,9 @@ class TestCollectForIdentity:
         seen = {_content_hash(_unique_code(i)) for i in range(2)}
 
         fetch_fn = MagicMock(side_effect=[_unique_code(f"new{i}") for i in range(4)])
-        result = collect_for_identity("claude", "claude-sonnet-4-6", fetch_fn, tmp_path, seen, target=4)
+        result = collect_for_identity(
+            "claude", "claude-sonnet-4-6", fetch_fn, tmp_path, seen, target=4
+        )
 
         assert result == 2
 
@@ -451,9 +461,9 @@ class TestCollectForIdentity:
 
     def test_api_error_skips_index_and_continues(self, tmp_path):
         side_effects = [
-            ConnectionError("timeout"),   # idx=0 fails
-            _unique_code("idx1"),         # idx=1 succeeds
-            _unique_code("idx2"),         # idx=2 succeeds
+            ConnectionError("timeout"),  # idx=0 fails
+            _unique_code("idx1"),  # idx=1 succeeds
+            _unique_code("idx2"),  # idx=2 succeeds
         ]
         fetch_fn = MagicMock(side_effect=side_effects)
         result = collect_for_identity("gpt4o", "gpt-4o", fetch_fn, tmp_path, set(), target=3)
@@ -518,5 +528,5 @@ class TestCollectForIdentity:
 
         collect_for_identity("gpt4o", "gpt-4o", fetch_fn, tmp_path, set(), target=target)
 
-        assert received[len(PROMPTS)]     == PROMPTS[0]  # wraps
+        assert received[len(PROMPTS)] == PROMPTS[0]  # wraps
         assert received[len(PROMPTS) + 1] == PROMPTS[1]

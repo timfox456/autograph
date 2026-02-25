@@ -1,5 +1,5 @@
-import pytest
 from src.features.extractor import LogicalDNAExtractor
+
 
 def test_layout_rhythm():
     extractor = LogicalDNAExtractor()
@@ -16,6 +16,7 @@ def bar():
     assert dna["max_consecutive_newlines"] >= 1
     assert dna["avg_vertical_chunk_size"] > 0
 
+
 def test_lexical_complexity():
     extractor = LogicalDNAExtractor()
     code = """def calculate_result(x, y):
@@ -24,8 +25,9 @@ def test_lexical_complexity():
 """
     dna = extractor.extract(code, enabled_buckets=["lexical_complexity"])
     assert dna["avg_identifier_length"] > 0
-    assert dna["short_identifier_ratio"] > 0 # x, y
+    assert dna["short_identifier_ratio"] > 0  # x, y
     assert dna["identifier_entropy"] > 0
+
 
 def test_lexical_complexity_ai_style():
     extractor = LogicalDNAExtractor()

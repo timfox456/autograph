@@ -50,7 +50,9 @@ class DummyAnomalyModel(AnomalyModel):
 
 
 def test_engine_uses_raw_impls_without_legacy_wrappers():
-    engine = AttestationEngine(matcher_impl=DummyIdentityModel(), consistency_impl=DummyAnomalyModel())
+    engine = AttestationEngine(
+        matcher_impl=DummyIdentityModel(), consistency_impl=DummyAnomalyModel()
+    )
     result = engine.attest("def t(): pass", claimed_identity="mariusz")
 
     # Should choose 'mariusz' and apply anomaly penalty (0.5x)
@@ -62,12 +64,16 @@ def test_engine_uses_raw_impls_without_legacy_wrappers():
 class UntrainedMatcher(IdentityModel):
     def train(self, X, y, feature_names):
         pass
+
     def predict_probs(self, X_df):
         return [("mariusz", 1.0)]
+
     def save(self, path: str):
         pass
+
     def load(self, path: str):
         pass
+
     def is_trained(self) -> bool:
         return False
 
@@ -79,18 +85,24 @@ class TrainedMatcher(DummyIdentityModel):
 class UntrainedAnomaly(AnomalyModel):
     def train(self, X, feature_names, identities):
         pass
+
     def score(self, identity: str, X_df):
         return 1, 0.0
+
     def save(self, path: str):
         pass
+
     def load(self, path: str):
         pass
+
     def is_trained(self) -> bool:
         return False
 
 
 def test_engine_blocks_untrained_matcher():
-    engine = AttestationEngine(matcher_impl=UntrainedMatcher(), consistency_impl=DummyAnomalyModel())
+    engine = AttestationEngine(
+        matcher_impl=UntrainedMatcher(), consistency_impl=DummyAnomalyModel()
+    )
     with pytest.raises(ValueError, match="Matcher model is not trained or loaded"):
         engine.attest("def t(): pass", claimed_identity="mariusz")
 
@@ -104,16 +116,20 @@ def test_engine_blocks_untrained_consistency():
 def test_engine_fallbacks_to_legacy_methods():
     class LegacyMatcher:
         features = ["a", "b"]
+
         def is_trained(self):
             return True
+
         def predict(self, feature_dict):
             # Legacy API: returns list of (label, prob)
             return [("mariusz", 0.8), ("other", 0.2)]
 
     class LegacyConsistency:
         features = ["a", "b"]
+
         def is_trained(self):
             return True
+
         def check_consistency(self, claimed_identity, feature_dict):
             # Legacy API: return (-1, score) to trigger penalty
             return -1, -0.1
