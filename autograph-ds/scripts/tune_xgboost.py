@@ -1,6 +1,21 @@
 #!/usr/bin/env python3
 """Hyperparameter tuning for XGBoostMatcher using RandomizedSearchCV."""
 
+import json
+import time
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from xgboost import XGBClassifier
+
+from config.hyperparameter_grids import XGB_PARAM_GRID
+from src.utils import sanitize_feature_names
+"""Hyperparameter tuning for XGBoostMatcher using RandomizedSearchCV."""
+
 import pandas as pd
 import json
 import numpy as np
@@ -36,7 +51,9 @@ def tune_xgboost(dataset_path='research/data/processed/dataset_329_features.csv'
     le = LabelEncoder()
     y_encoded = le.fit_transform(y)
     
-    # Sanitize feature names for XGBoost
+    # Sanitize feature names for XGBoost using shared utility
+    X_sanitized = X.copy()
+    X_sanitized.columns = sanitize_feature_names(list(X_sanitized.columns))
     X_sanitized = X.copy()
     X_sanitized.columns = [col.replace('[', '_').replace(']', '_').replace('<', '_').replace('>', '_') 
                            for col in X_sanitized.columns]

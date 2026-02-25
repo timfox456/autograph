@@ -45,6 +45,13 @@ def test_ensemble_train_and_predict(synthetic_data):
 
     assert len(probs) == 3  # 3 classes
     assert probs[0][0] == 'alice'
+    # Use a more stringent threshold than 0.5 for clear cases
+    # Alice centroid is (1.0, 0.1) and test point is (1.0, 0.1)
+    assert probs[0][1] > 0.85, f"Expected high confidence for 'alice', got {probs[0][1]:.3f}"
+    # Verify sorted order and probability sum
+    assert probs[0][1] > probs[1][1] > probs[2][1]
+    assert abs(sum(p for _, p in probs) - 1.0) < 1e-6
+    assert probs[0][0] == 'alice'
     assert probs[0][1] > 0.5
 
 
@@ -132,3 +139,51 @@ def test_ensemble_without_param_files(synthetic_data):
 
     assert len(probs) == 3
     assert probs[0][0] == 'bob'
+
+
+
+def test_ensemble_voting_weights_sum_to_one(synthetic_data):
+    """Test that ensemble predictions sum to 1 (soft voting property)."""
+    X, y, feature_names = synthetic_data
+    
+    model = EnsembleMatcher()
+    model.train(X, y, feature_names)
+    
+    # Test multiple samples
+    test_df = pd.DataFrame({
+        'feature1': [1.0, 5.0, 9.0],
+        'feature2': [0.1, 0.5, 0.9]
+    })
+    batch_probs = model.predict_probs_batch(test_df)
+    
+    for sample_probs in batch_probs:
+        # Probabilities must sum to 1
+        total = sum(p for _, p in sample_probs)
+        assert abs(total - 1.0) < 1e-6, f"Probabilities sum to {total}, not 1.0"
+        
+        # Must have exactly 3 classes
+        assert len(sample_probs) == 3
+        
+        # Must be sorted descending
+        for i in range(len(sample_probs) - 1):
+            assert sample_probs[i][1] >= sample_probs[i+1][1]
+
+
+def test_ensemble_extract_classifier_params_no_model_type():
+    """Test that _extract_classifier_params works without model_type parameter."""
+    model = EnsembleMatcher()
+    
+    # Test with classifier__ prefixed params
+    params = {
+        'classifier__n_estimators': 100,
+        'classifier__max_depth': 10,
+        'other_param': 'ignored'
+    }
+    
+    extracted = model._extract_classifier_params(params)
+    
+    assert 'n_estimators' in extracted
+    assert 'max_depth' in extracted
+    assert 'other_param' not in extracted  # Should be filtered out
+    assert extracted['n_estimators'] == 100
+    assert extracted['max_depth'] == 10

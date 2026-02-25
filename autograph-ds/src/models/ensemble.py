@@ -35,11 +35,11 @@ class EnsembleMatcher(IdentityModel):
         self.xgb_params = self._load_params(xgb_params_path) if xgb_params_path else {}
         
         self.rf_matcher = RandomForestMatcher(
-            **self._extract_classifier_params(self.rf_params, 'rf'),
+            **self._extract_classifier_params(self.rf_params),
             random_state=random_state
         )
         self.xgb_matcher = XGBoostMatcher(
-            **self._extract_classifier_params(self.xgb_params, 'xgb'),
+            **self._extract_classifier_params(self.xgb_params),
             random_state=random_state
         )
         
@@ -56,10 +56,14 @@ class EnsembleMatcher(IdentityModel):
             data = json.load(f)
         return data.get('best_params', {})
     
-    def _extract_classifier_params(self, params_dict, model_type):
+    def _extract_classifier_params(self, params_dict):
         """
         Extract classifier parameters from pipeline params dict.
         Removes 'classifier__' prefix.
+        
+        Note: The model_type parameter was previously accepted but unused since 
+        both RF and XGB use the same parameter naming convention (classifier__ prefix).
+        This has been removed to simplify the API.
         """
         extracted = {}
         prefix = 'classifier__'
@@ -73,9 +77,16 @@ class EnsembleMatcher(IdentityModel):
         """
         Train the ensemble on features X and labels y.
         
+        NOTE: Label encoding strategy - Each sub-model (RF, XGB) internally fits
+        its own LabelEncoder during train(). The VotingClassifier receives the
+        ensemble's encoded labels. This is intentional: each model manages its
+        own encoding, and all produce consistent predictions because they decode
+        using their fitted encoders. This design allows sub-models to be used
+        independently or within the ensemble without requiring pre-encoded labels.
+        
         Args:
             X_data: Feature matrix (DataFrame or array-like)
-            y: Target labels
+            y: Target labels (raw string labels, will be encoded internally)
             feature_names: List of feature names
         """
         self.features = feature_names
@@ -84,9 +95,14 @@ class EnsembleMatcher(IdentityModel):
         
         X_prepared = X if isinstance(X, pd.DataFrame) else pd.DataFrame(X, columns=feature_names)
         
+        # Train sub-models with RAW labels (they handle internal encoding)
+        # This is intentional - each sub-model fits its own LabelEncoder
         self.rf_matcher.train(X_prepared, y, feature_names)
         self.xgb_matcher.train(X_prepared, y, feature_names)
         
+        # VotingClassifier uses the ensemble's encoded labels
+        # All models will produce consistent predictions because each decodes
+        # using their own fitted encoder
         self.voting_classifier = VotingClassifier(
             estimators=[
                 ('rf', self.rf_matcher.pipeline),

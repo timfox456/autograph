@@ -1,5 +1,11 @@
 from abc import ABC, abstractmethod
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
+import pandas as pd
+
+from ..utils import sanitize_feature_names, validate_input_features
+
 
 class BaseModel(ABC):
     def __init__(self):
@@ -7,34 +13,68 @@ class BaseModel(ABC):
 
     def _sanitize_feature_names(self, feature_names: list[str]) -> list[str]:
         """
-        Sanitizes feature names for model compatibility by replacing characters
-        that some libraries disallow (e.g., XGBoost) and ensuring uniqueness.
+        Sanitizes feature names for model compatibility.
+        
+        DEPRECATED: Use sanitize_feature_names from src.utils directly.
+        This method is kept for backward compatibility.
         """
-        clean_features: list[str] = []
-        seen: dict[str, int] = {}
-        for f in feature_names:
-            clean = f.replace('[', '_').replace(']', '_').replace('<', '_').replace('>', '_')
-            if clean in seen:
-                seen[clean] += 1
-                clean = f"{clean}_{seen[clean]}"
-            else:
-                seen[clean] = 0
-            clean_features.append(clean)
-        return clean_features
+        return sanitize_feature_names(feature_names)
+
+    def _validate_input(self, X: pd.DataFrame, context: Optional[str] = None) -> None:
+        """
+        Validate input features for NaN/inf values.
+        
+        Args:
+            X: Input DataFrame to validate
+            context: Optional context string for error messages
+            
+        Raises:
+            ValueError: If validation fails (e.g., all NaN column)
+        """
+        context_str = f" ({context})" if context else ""
+        
+        for col in X.columns:
+            series = X[col]
+            
+            # Check for all-NaN columns
+            if series.isna().all():
+                raise ValueError(
+                    f"Column '{col}' contains all NaN values{context_str}. "
+                    "Please check your input data."
+                )
+            
+            # Check for infinite values in numeric columns
+            try:
+                numeric_series = pd.to_numeric(series, errors='coerce')
+                inf_mask = np.isinf(numeric_series)
+                inf_count = inf_mask.sum()
+                if inf_count > 0:
+                    # Log warning but don't fail - inf can be valid in some contexts
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(
+                        f"Column '{col}' contains {inf_count} infinite values{context_str}"
+                    )
+            except (TypeError, ValueError):
+                pass  # Non-numeric column, skip inf check
 
     def _prepare_features(self, X_df: Any, expected_features: Optional[list[str]] = None) -> Any:
         """
         Ensures X_df has all expected features in the correct order.
         Missing features are filled with 0.
+        
+        Also validates input for NaN/inf issues.
         """
-        import pandas as pd
-        import numpy as np
-
         if not isinstance(X_df, pd.DataFrame):
             # If it's a dict or single sample, convert to DataFrame
             X_df = pd.DataFrame([X_df])
 
         expected = expected_features if expected_features is not None else self.features
+        
+        # Validate expected features are provided
+        if not expected:
+            raise ValueError("No expected features provided. Model may not be trained.")
+        
         missing_cols = [col for col in expected if col not in X_df.columns]
         if missing_cols:
             # Create a DataFrame of zeros for missing columns
@@ -47,7 +87,11 @@ class BaseModel(ABC):
         else:
             X_test = X_df.copy()
 
+        # Validate the prepared features
+        self._validate_input(X_test[expected], context="feature preparation")
+        
         return X_test[expected]
+
 
 class IdentityModel(BaseModel):
     """
@@ -66,7 +110,6 @@ class IdentityModel(BaseModel):
     def predict_probs_batch(self, X_df) -> List[List[Tuple[str, float]]]:
         """Predict identity probabilities for multiple samples in X_df."""
         # Default implementation: loop over rows
-        import pandas as pd
         if not isinstance(X_df, pd.DataFrame):
             X_df = pd.DataFrame([X_df])
         
@@ -89,6 +132,7 @@ class IdentityModel(BaseModel):
     def is_trained(self) -> bool:
         """Returns True if the model has been trained/loaded and is ready."""
         pass
+
 
 class AnomalyModel(BaseModel):
     """

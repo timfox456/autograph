@@ -5,7 +5,6 @@ import pandas as pd
 import numpy as np
 import json
 from pathlib import Path
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
     classification_report, confusion_matrix, roc_auc_score
@@ -36,6 +35,12 @@ def evaluate_model_comprehensive(model, X_train, X_test, y_train, y_test, model_
     classes = np.unique(y_test)
     
     y_pred_proba = np.zeros((len(X_test), len(classes)))
+    # Efficient dict-lookup per row instead of triple-nested loop
+    for i, probs in enumerate(probs_batch):
+        # Convert list of tuples to dict for O(1) lookup
+        prob_dict = dict(probs)
+        for j, cls in enumerate(classes):
+            y_pred_proba[i, j] = prob_dict.get(cls, 0.0)
     for i, probs in enumerate(probs_batch):
         for j, cls in enumerate(classes):
             for pred_cls, prob in probs:
@@ -100,20 +105,24 @@ def evaluate_model_comprehensive(model, X_train, X_test, y_train, y_test, model_
     }
 
 def main():
-    dataset_path = Path("research/data/processed/dataset_329_features.csv")
-    df = pd.read_csv(dataset_path)
-    
-    X = df.drop(columns=['label', 'identity', 'filename'])
-    y = df['identity']
-    feature_names = X.columns.tolist()
-    
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
-    
-    print(f"Dataset: {len(df)} samples")
+    # Load the pre-saved train/test splits produced by train_models.py.
+    # These apply the same identity-count filter (>=2 samples) used during
+    # actual model training, ensuring this evaluation uses the exact same
+    # holdout set the models were trained against.
+    data_dir = Path("research/data/processed")
+    train_df = pd.read_csv(data_dir / "dataset_train.csv")
+    test_df = pd.read_csv(data_dir / "dataset_test.csv")
+
+    meta_cols = ['label', 'identity', 'filename']
+    feature_names = [c for c in train_df.columns if c not in meta_cols]
+
+    X_train = train_df[feature_names]
+    y_train = train_df['identity']
+    X_test = test_df[feature_names]
+    y_test = test_df['identity']
+
     print(f"Train: {len(X_train)}, Test: {len(X_test)}")
-    print(f"Classes: {y.nunique()}")
+    print(f"Classes: {y_train.nunique()}")
     
     rf_model = RandomForestMatcher()
     rf_results = evaluate_model_comprehensive(
@@ -128,9 +137,8 @@ def main():
     results = {
         'random_forest': rf_results,
         'xgboost': xgb_results,
-        'dataset': str(dataset_path),
-        'test_size': 0.2,
-        'random_state': 42
+        'train_file': str(data_dir / "dataset_train.csv"),
+        'test_file': str(data_dir / "dataset_test.csv"),
     }
     
     output_path = '.sisyphus/comprehensive_evaluation_results.json'

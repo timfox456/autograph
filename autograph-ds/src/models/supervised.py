@@ -69,6 +69,19 @@ class RandomForestMatcher(IdentityModel):
         """
         Evaluate model using StratifiedKFold cross-validation.
         Returns train and validation scores for multiple metrics.
+        
+        NOTE: This method uses a local LabelEncoder to avoid mutating the
+        model's fitted state. The model's label_encoder is NOT re-fitted here.
+        """
+        from sklearn.model_selection import StratifiedKFold, cross_validate
+        from sklearn.preprocessing import LabelEncoder
+        
+        # Use a local label encoder to avoid mutating model state
+        local_encoder = LabelEncoder()
+        encoded_y = local_encoder.fit_transform(y)
+        """
+        Evaluate model using StratifiedKFold cross-validation.
+        Returns train and validation scores for multiple metrics.
         """
         from sklearn.model_selection import StratifiedKFold, cross_validate
         
