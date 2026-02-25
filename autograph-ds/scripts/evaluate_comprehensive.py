@@ -41,12 +41,6 @@ def evaluate_model_comprehensive(model, X_train, X_test, y_train, y_test, model_
         prob_dict = dict(probs)
         for j, cls in enumerate(classes):
             y_pred_proba[i, j] = prob_dict.get(cls, 0.0)
-    for i, probs in enumerate(probs_batch):
-        for j, cls in enumerate(classes):
-            for pred_cls, prob in probs:
-                if pred_cls == cls:
-                    y_pred_proba[i, j] = float(prob)
-                    break
     
     accuracy = accuracy_score(y_test, y_pred)
     precision_macro = precision_score(y_test, y_pred, average='macro', zero_division=0)

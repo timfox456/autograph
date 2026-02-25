@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple
+import logging
 
 import numpy as np
 import pandas as pd
 
-from ..utils import sanitize_feature_names, validate_input_features
+from src.utils import sanitize_feature_names, validate_input_features
 
+logger = logging.getLogger(__name__)
 
 class BaseModel(ABC):
     def __init__(self):
@@ -50,8 +52,6 @@ class BaseModel(ABC):
                 inf_count = inf_mask.sum()
                 if inf_count > 0:
                     # Log warning but don't fail - inf can be valid in some contexts
-                    import logging
-                    logger = logging.getLogger(__name__)
                     logger.warning(
                         f"Column '{col}' contains {inf_count} infinite values{context_str}"
                     )

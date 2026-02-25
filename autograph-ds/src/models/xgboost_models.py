@@ -7,8 +7,8 @@ import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier
 
-from ..utils import coerce_numeric_with_warning, sanitize_feature_names
-from ..utils.pipeline import create_classification_pipeline
+from src.utils import coerce_numeric_with_warning, sanitize_feature_names
+from src.utils.pipeline import create_classification_pipeline
 from .base import AnomalyModel, IdentityModel
 
 try:

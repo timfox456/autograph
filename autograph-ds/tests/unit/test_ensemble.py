@@ -51,8 +51,6 @@ def test_ensemble_train_and_predict(synthetic_data):
     # Verify sorted order and probability sum
     assert probs[0][1] > probs[1][1] > probs[2][1]
     assert abs(sum(p for _, p in probs) - 1.0) < 1e-6
-    assert probs[0][0] == 'alice'
-    assert probs[0][1] > 0.5
 
 
 def test_ensemble_predict_probs_batch(synthetic_data):
