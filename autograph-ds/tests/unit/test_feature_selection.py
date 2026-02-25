@@ -157,8 +157,8 @@ class TestFeatureSelector:
         # Cumulative should sum to 1.0
         assert abs(ranking["cumulative"].iloc[-1] - 1.0) < 1e-6
 
-        # Percentages should be between 0 and 1
-        assert all(0 <= v <= 1 for v in ranking["cumulative_pct"])
+        # Percentages should be between 0 and 1 (with floating-point tolerance)
+        assert all(-1e-9 <= v <= 1 + 1e-9 for v in ranking["cumulative_pct"])
 
     def test_caching_across_methods(self, sample_data, monkeypatch):
         """Test that RF is cached when both methods are called."""
