@@ -21,7 +21,7 @@ jobs:
         run: uv python install 3.12.8
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --python 3.12.8
 
       - name: Check formatting (black)
         run: uv run black --check autograph-ds/src/ autograph-ds/tests/
@@ -43,7 +43,7 @@ jobs:
         run: uv python install 3.12.8
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --python 3.12.8
 
       - name: Run unit tests
         run: uv run pytest autograph-ds/tests/unit -v --tb=short
